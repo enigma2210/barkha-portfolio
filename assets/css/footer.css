@@ -1,0 +1,24 @@
+/* --------------------------------------
+   FOOTER
+-------------------------------------- */
+.footer{
+  background:var(--sky-950);padding:3rem 2rem;
+  border-top:1px solid rgba(255,255,255,.05);
+}
+.footer-inner{
+  max-width:1320px;margin:0 auto;
+  display:flex;align-items:flex-start;justify-content:space-between;
+  flex-wrap:wrap;gap:2rem;
+}
+.footer-brand-en{font-family:'Cormorant Garamond',serif;font-size:1.2rem;font-weight:700;color:#fff;margin-bottom:.3rem}
+.footer-brand-hi{font-family:'Noto Sans Devanagari',sans-serif;font-size:.72rem;color:var(--sky-400);letter-spacing:.05em}
+.footer-tagline{font-size:.78rem;color:rgba(255,255,255,.4);margin-top:.5rem;max-width:260px;line-height:1.6}
+.footer-links-col h4{font-size:.7rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--sky-400);margin-bottom:.8rem}
+.footer-links-col a{display:block;font-size:.82rem;color:rgba(255,255,255,.45);margin-bottom:.45rem;transition:color var(--t-fast)}
+.footer-links-col a:hover{color:var(--sky-400)}
+.footer-bottom{
+  max-width:1320px;margin:.4rem auto 0;
+  padding-top:1.5rem;border-top:1px solid rgba(255,255,255,.07);
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;
+  font-size:.74rem;color:rgba(255,255,255,.28);
+}

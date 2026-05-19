@@ -1,0 +1,69 @@
+/* +------------------------------------------------------+
+   DESIGN TOKENS
+   +------------------------------------------------------+ */
+
+:root {
+  /* === PRIMARY GRADIENT PALETTE === */
+  /* This is the SIGNATURE GRADIENT of the site — used everywhere as the accent */
+  /* It runs: deep ink-navy (#07111F) → cobalt blue (#1563B2) → sky (#3B9AE8) → teal (#14B8A6) */
+  /* On light backgrounds, a shorter version is used: sky-500 → teal-500 */
+  --grad-hero:    linear-gradient(135deg, #07111F 0%, #1563B2 38%, #3B9AE8 68%, #14B8A6 100%);
+  --grad-accent:  linear-gradient(135deg, #1E7ED4 0%, #14B8A6 100%);
+  --grad-text:    linear-gradient(135deg, #1563B2 0%, #14B8A6 100%); /* for gradient text */
+  --grad-hero-bar:linear-gradient(90deg,  #1563B2 0%, #14B8A6 100%); /* horizontal bars */
+  --grad-dark:    linear-gradient(135deg, #07111F 0%, #0B2138 100%); /* dark sections */
+
+  /* === BACKGROUND COLORS === */
+  --bg-page:      #EEF5FD;    /* main page background — very light blue-grey */
+  --bg-white:     #FFFFFF;
+  --bg-off:       #F8FBFF;
+  --bg-mint-light:#F0FFF4;    /* SOCH page tint */
+  --bg-sky-light: #F0F7FF;    /* sky-25 — card backgrounds */
+  --bg-sky-50:    #E0EFFF;
+
+  /* === TEXT COLORS === */
+  --text-ink:     #07111F;    /* darkest — headings, brand name */
+  --text-navy:    #062850;    /* dark navy — h1, h2 on light bg */
+  --text-body:    #1E3A5A;    /* body copy */
+  --text-mid:     #4A6580;    /* secondary text */
+  --text-muted:   #7A9AB8;    /* captions, meta */
+  --text-light:   #A8C0D6;    /* placeholders */
+  --text-white:   #FFFFFF;
+  --text-teal-dark: #0D6B5A;  /* SOCH/IIRO accent text — dark teal */
+
+  /* === BRAND COLORS === */
+  --sky-400:  #3B9AE8;
+  --sky-500:  #1E7ED4;
+  --sky-600:  #1563B2;
+  --sky-700:  #0E4D8F;
+  --sky-800:  #093A6B;
+  --sky-900:  #062850;
+  --sky-950:  #031627;
+  --teal-400: #2DD4BF;
+  --teal-500: #14B8A6;
+  --teal-600: #0D9488;
+  --mint-600: #16A34A;
+  --gold:     #C59A4A;
+
+  /* === BORDERS === */
+  --border:    rgba(30,126,212,0.12);
+  --border-md: rgba(30,126,212,0.22);
+
+  /* === SHADOWS === */
+  --s1: 0 1px 4px rgba(6,40,80,0.06), 0 1px 2px rgba(6,40,80,0.04);
+  --s2: 0 4px 16px rgba(6,40,80,0.09), 0 2px 6px rgba(6,40,80,0.06);
+  --s3: 0 8px 32px rgba(6,40,80,0.12), 0 3px 10px rgba(6,40,80,0.08);
+  --s4: 0 16px 56px rgba(6,40,80,0.16), 0 6px 20px rgba(6,40,80,0.10);
+
+  /* === RADIUS === */
+  --r-sm:   8px;
+  --r-md:   14px;
+  --r-lg:   22px;
+  --r-xl:   32px;
+  --r-full: 9999px;
+
+  /* === TIMING === */
+  --t-fast: 160ms;
+  --t-med:  260ms;
+  --t-slow: 420ms;
+}

@@ -1,0 +1,22 @@
+/* --------------------------------------
+   CONTACT
+-------------------------------------- */
+.contact-section{background:var(--bg-white)}
+.contact-links-col{display:flex;flex-direction:column;gap:.75rem}
+.contact-link{
+  display:flex;align-items:center;gap:1rem;
+  padding:1rem 1.3rem;background:var(--bg-white);
+  border:1px solid rgba(20,184,166,.14);border-radius:var(--r-md);
+  transition:all var(--t-med);
+  box-shadow:var(--s1);
+}
+.contact-link:hover{background:rgba(20,184,166,.06);border-color:rgba(20,184,166,.32);transform:translateX(4px)}
+.cl-icon{font-size:1.3rem;width:34px;text-align:center;flex-shrink:0}
+.cl-label{font-size:.69rem;font-weight:700;color:var(--sky-400);letter-spacing:.1em;text-transform:uppercase}
+.cl-val{font-size:.88rem;color:var(--text-body);margin-top:.1rem;font-weight:500}
+.contact-form-box{
+  background:var(--bg-white);border:1px solid rgba(20,184,166,.14);
+  border-radius:var(--r-xl);padding:2.2rem;
+  box-shadow:var(--s1);
+}
+.contact-form-box h3{font-family:'Cormorant Garamond',serif;font-size:1.4rem;color:var(--text-navy);margin-bottom:1.4rem}

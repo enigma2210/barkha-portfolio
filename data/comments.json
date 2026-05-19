@@ -1,0 +1,11 @@
+﻿[
+  {
+    "id": "seed-001",
+    "articleId": "nist",
+    "name": "Rishabh Singh",
+    "email": "",
+    "text": "This article is a great starting point for someone who is interested in DNSSEC!",
+    "date": "April 19, 2026",
+    "status": "approved"
+  }
+]

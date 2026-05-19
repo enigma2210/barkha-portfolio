@@ -1,0 +1,136 @@
+/* --------------------------------------
+   NAVIGATION
+-------------------------------------- */
+#nav.nav-root,
+.nav-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(1.5rem, 5vw, 4rem);
+  background: rgba(255,249,238,0.72);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid rgba(197,154,74,0.14);
+  transition: background var(--t-med), box-shadow var(--t-med);
+}
+
+#nav.nav-root.scrolled,
+.nav-root.scrolled {
+  background: rgba(255,249,238,0.88);
+  box-shadow: 0 12px 48px rgba(7,17,31,0.08);
+}
+
+.nav-root .nav-inner {
+  width: 100%;
+  max-width: none;
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  margin: 0;
+}
+
+.nav-brand {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+
+.nav-brand-en {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.28rem;
+  font-weight: 700;
+  color: var(--text-ink);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.nav-brand-hi {
+  font-family: 'Noto Sans Devanagari', sans-serif;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--sky-400);
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  list-style: none;
+}
+
+.nav-link,
+.nav-links a.nav-link {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.73rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(7,17,31,0.55);
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  position: relative;
+  transition: color var(--t-fast), background var(--t-fast);
+  white-space: nowrap;
+  background: none;
+  border: none;
+}
+
+.nav-link:hover,
+.nav-links a.nav-link:hover {
+  color: var(--text-ink);
+  background: rgba(197,154,74,0.08);
+}
+
+.nav-link.active,
+.nav-links a.nav-link.active {
+  color: var(--text-ink);
+  font-weight: 700;
+}
+
+.nav-link.active::after,
+.nav-links a.nav-link.active::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 0.75rem;
+  right: 0.75rem;
+  height: 2px;
+  background: var(--grad-hero-bar);
+  border-radius: 2px;
+}
+
+.nav-link:not(.active)::after,
+.nav-links a.nav-link:not(.active)::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  right: 50%;
+  height: 2px;
+  background: var(--grad-hero-bar);
+  border-radius: 2px;
+  transition: left var(--t-med), right var(--t-med);
+}
+
+.nav-link:not(.active):hover::after,
+.nav-links a.nav-link:not(.active):hover::after {
+  left: 0.75rem;
+  right: 0.75rem;
+}

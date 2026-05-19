@@ -1,0 +1,8 @@
+/* -- RESET -- */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{font-family:'Inter',sans-serif;background:var(--bg-page);color:var(--text-body);overflow-x:hidden;line-height:1.65}
+a{text-decoration:none;color:inherit}
+button{cursor:pointer;font-family:inherit;border:none;background:none}
+img{display:block;max-width:100%}
+::selection{background:var(--sky-400);color:var(--sky-900)}

@@ -1,0 +1,78 @@
+.section-eyebrow,
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--teal-600);
+  margin-bottom: 0.6rem;
+  display: block;
+}
+
+.section-eyebrow::before,
+.eyebrow::before {
+  content: none;
+  display: none;
+}
+
+.section-eyebrow.on-dark {
+  color: var(--teal-400);
+}
+
+.heading-xl {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2.2rem, 4.5vw, 3.8rem);
+  font-weight: 700;
+  color: var(--text-navy);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.section-h2,
+.heading-lg {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  font-weight: 700;
+  color: var(--text-navy);
+  line-height: 1.15;
+}
+
+.heading-md {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.3rem, 2.5vw, 1.9rem);
+  font-weight: 700;
+  color: var(--text-navy);
+  line-height: 1.25;
+}
+
+.section-h2 em,
+.section-h2 i,
+.section-h2 .text-gradient,
+.text-gradient {
+  font-style: italic;
+  color: var(--gold);
+  background: none;
+}
+
+.section-h2.on-dark {
+  color: white;
+}
+
+.section-accent-bar {
+  width: 44px;
+  height: 3px;
+  background: var(--grad-hero-bar);
+  border-radius: 2px;
+  margin: 0.9rem 0 1.6rem;
+}
+
+.section-accent-bar.centered {
+  margin: 0.9rem auto 1.6rem;
+}
+
+.subtext {
+  font-size: 0.96rem;
+  color: var(--text-mid);
+  line-height: 1.8;
+  max-width: 620px;
+}
