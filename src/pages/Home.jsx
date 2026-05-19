@@ -1,10 +1,10 @@
 import { motion, useInView, useScroll, useTransform } from 'framer-motion';
-import { useMemo, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SEO } from '../components/seo/SEO';
-import { getArticlePath, getPublishedArticles } from '../data/articleStore';
 import { AFFILIATIONS } from '../data/affiliations';
 import { HERO_BIO, PERSON, STATS as SITE_STATS } from '../data/siteData';
+import { getArticlePath, getPublishedArticles, subscribeToArticleChanges } from '../services/articleService';
 import { CounterNumber } from '../components/ui/CounterNumber';
 import { Eyebrow } from '../components/ui/Eyebrow';
 import { FadeIn } from '../components/ui/FadeIn';
@@ -135,11 +135,28 @@ function HeroSection() {
 }
 
 function SomeExcerpts() {
-  const articles = useMemo(() => {
-    return getPublishedArticles().slice(0, 6).map((article) => ({
-      ...article,
-      comments: article.readingTime ? `${article.readingTime} min read` : 'New Article',
-    }));
+  const [articles, setArticles] = useState([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    const loadArticles = async () => {
+      try {
+        const next = await getPublishedArticles({ limit: 6 });
+        if (active) setArticles(next);
+      } catch (err) {
+        if (active) setError(err.message || 'Unable to load articles.');
+      }
+    };
+
+    loadArticles();
+    const unsubscribe = subscribeToArticleChanges(loadArticles);
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
   return (
@@ -149,6 +166,7 @@ function SomeExcerpts() {
           <Eyebrow className="u-justify-center">Latest Articles</Eyebrow>
           <h2 className="section-h2 heading-lg home-live-section-title">Featured Articles</h2>
         </FadeIn>
+        {error ? <p className="no-comments">{error}</p> : null}
         <div className="blogs-grid home-live-excerpt-grid">
           {articles.map((article, index) => (
               <FadeIn className="blog-card home-live-excerpt-card" delay={index * 0.08} key={article.id}>

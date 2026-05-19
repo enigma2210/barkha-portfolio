@@ -1,50 +1,48 @@
 import { useEffect, useRef, useState } from 'react';
-import { ARTS } from '../../data/articles';
+import {
+  deleteArticle,
+  getArticlePath,
+  getEditableArticles,
+  saveArticle,
+} from '../../services/articleService';
+import { isSupabaseConfigured } from '../../services/supabaseClient';
 import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import { toSlug } from '../../utils/urlRouter';
 
-const STORAGE_KEY = 'barkha_user_articles_v1';
-
-export function getUserArticles() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  } catch {
-    return [];
-  }
-}
-
-export function saveUserArticles(articles) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(articles));
-}
+const EMPTY_ARTICLE = {
+  id: '',
+  title: '',
+  slug: '',
+  cat: '',
+  category: '',
+  date: '',
+  dateRaw: '',
+  excerpt: '',
+  body: '<p><br></p>',
+  status: 'draft',
+  coverImage: '',
+  coverFit: 'cover',
+  tags: [],
+  authorName: 'Barkha Manral',
+  seo: {
+    metaTitle: '',
+    metaDescription: '',
+    openGraphImage: '',
+    canonicalUrl: '',
+  },
+};
 
 const TOOLBAR = [
-  { cmd: 'bold', icon: 'B', title: 'Bold', style: 'font-weight:700' },
-  { cmd: 'italic', icon: 'I', title: 'Italic', style: 'font-style:italic' },
-  { cmd: 'underline', icon: 'U', title: 'Underline', style: 'text-decoration:underline' },
+  { cmd: 'bold', icon: 'B', title: 'Bold' },
+  { cmd: 'italic', icon: 'I', title: 'Italic' },
+  { cmd: 'underline', icon: 'U', title: 'Underline' },
   { sep: true },
   { cmd: 'formatBlock', arg: 'h2', icon: 'H2', title: 'Heading 2' },
   { cmd: 'formatBlock', arg: 'h3', icon: 'H3', title: 'Heading 3' },
   { cmd: 'formatBlock', arg: 'p', icon: 'P', title: 'Paragraph' },
   { sep: true },
-  {
-    cmd: 'blockquote',
-    icon: '❝',
-    title: 'Callout block',
-    custom: () => document.execCommand('formatBlock', false, 'blockquote'),
-  },
-  { sep: true },
-  { cmd: 'insertUnorderedList', icon: '• —', title: 'Bullet List' },
+  { cmd: 'insertUnorderedList', icon: 'List', title: 'Bullet List' },
   { cmd: 'insertOrderedList', icon: '1.', title: 'Numbered List' },
-  { sep: true },
-  {
-    cmd: 'createLink',
-    icon: '🔗',
-    title: 'Insert Link',
-    custom: () => {
-      const url = window.prompt('Enter URL:');
-      if (url) document.execCommand('createLink', false, url);
-    },
-  },
 ];
 
 const inputStyle = {
@@ -57,7 +55,6 @@ const inputStyle = {
   outline: 'none',
   boxSizing: 'border-box',
   fontFamily: "'Inter', sans-serif",
-  transition: 'border-color 0.18s, box-shadow 0.18s',
   background: 'white',
 };
 
@@ -71,28 +68,8 @@ const labelStyle = {
   letterSpacing: '0.06em',
 };
 
-function slugify(value) {
-  return toSlug(value);
-}
-
 function stripHtml(html) {
   return String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function createBlankArticle() {
-  return {
-    id: `article-${Date.now()}`,
-    cat: '',
-    title: '',
-    date: '',
-    dateRaw: '',
-    excerpt: '',
-    body: '<p><br></p>',
-    status: 'draft',
-    coverImage: null,
-    coverFit: 'cover',
-    createdAt: Date.now(),
-  };
 }
 
 function wordCount(html) {
@@ -109,36 +86,50 @@ function excerptFromBody(html) {
   return text.length > 160 ? `${text.slice(0, 160).trim()}...` : text;
 }
 
-function uniqueSlug(base, articles, previousId) {
-  const fallback = `article-${Date.now()}`;
-  const cleanBase = slugify(base) || fallback;
-  let candidate = cleanBase;
-  let suffix = 2;
-  const staticSlugs = Object.entries(ARTS).flatMap(([key, article]) => [key, toSlug(article.title)]);
-  const taken = new Set([
-    ...staticSlugs,
-    ...articles
-      .filter((article) => article.id !== previousId && article.slug !== previousId)
-      .flatMap((article) => [article.id, article.slug].filter(Boolean)),
-  ]);
-
-  while (taken.has(candidate)) {
-    candidate = `${cleanBase}-${suffix}`;
-    suffix += 1;
-  }
-
-  return candidate;
+function normalizeForEditor(article) {
+  return {
+    ...EMPTY_ARTICLE,
+    ...article,
+    cat: article.cat || article.category || '',
+    category: article.category || article.cat || '',
+    coverImage: article.coverImage || article.featuredImage || '',
+    body: article.body || article.content || '<p><br></p>',
+    seo: {
+      ...EMPTY_ARTICLE.seo,
+      ...(article.seo || {}),
+    },
+  };
 }
 
 export function ArticleEditor({ showToast }) {
   const [mode, setMode] = useState('list');
-  const [articles, setArticles] = useState(getUserArticles);
+  const [articles, setArticles] = useState([]);
   const [current, setCurrent] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [coverPreview, setCoverPreview] = useState(null);
   const [lastPublishedUrl, setLastPublishedUrl] = useState('');
   const [copiedUrl, setCopiedUrl] = useState(false);
   const editorRef = useRef(null);
   const coverInputRef = useRef(null);
+
+  async function loadArticles() {
+    setLoading(true);
+    try {
+      const next = await getEditableArticles();
+      setArticles(next);
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Unable to load articles.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadArticles();
+  }, []);
 
   useEffect(() => {
     if (mode === 'edit' && editorRef.current && current) {
@@ -151,54 +142,18 @@ export function ArticleEditor({ showToast }) {
     setCurrent((article) => (article ? { ...article, body } : article));
   }
 
-  function insertHtmlAtSelection(html) {
-    const editor = editorRef.current;
-    if (!editor) return;
-
-    editor.focus();
-    const cleaned = sanitizeHtml(html);
-
-    if (document.queryCommandSupported?.('insertHTML')) {
-      document.execCommand('insertHTML', false, cleaned);
-      syncEditorBody();
-      return;
-    }
-
-    const selection = window.getSelection();
-    if (!selection?.rangeCount) {
-      editor.insertAdjacentHTML('beforeend', cleaned);
-      syncEditorBody();
-      return;
-    }
-
-    const range = selection.getRangeAt(0);
-    if (!editor.contains(range.commonAncestorContainer)) {
-      editor.insertAdjacentHTML('beforeend', cleaned);
-      syncEditorBody();
-      return;
-    }
-
-    range.deleteContents();
-    const template = document.createElement('template');
-    template.innerHTML = cleaned;
-    const fragment = template.content;
-    const lastNode = fragment.lastChild;
-    range.insertNode(fragment);
-
-    if (lastNode) {
-      range.setStartAfter(lastNode);
-      range.collapse(true);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
-
-    syncEditorBody();
+  function createBlankArticle() {
+    return {
+      ...EMPTY_ARTICLE,
+      createdAt: new Date().toISOString(),
+      date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+    };
   }
 
-  function insertCallout() {
-    insertHtmlAtSelection(
-      '<div class="art-callout"><p><strong>Key point:</strong> Add your callout text here.</p></div><p><br></p>',
-    );
+  function insertHtmlAtSelection(html) {
+    editorRef.current?.focus();
+    document.execCommand('insertHTML', false, sanitizeHtml(html));
+    syncEditorBody();
   }
 
   function handleCoverFile(file) {
@@ -207,39 +162,68 @@ export function ArticleEditor({ showToast }) {
       window.alert('Image must be under 8MB');
       return;
     }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       setCoverPreview(event.target.result);
-      setCurrent((article) => ({ ...article, coverImage: event.target.result }));
+      setCurrent((article) => ({
+        ...article,
+        coverImage: event.target.result,
+        seo: {
+          ...article.seo,
+          openGraphImage: article.seo?.openGraphImage || event.target.result,
+        },
+      }));
     };
     reader.readAsDataURL(file);
   }
 
-  function saveArticle(status) {
-    const all = getUserArticles();
-    const previousId = current.id;
+  async function saveCurrent(status) {
+    if (!current?.title?.trim()) {
+      window.alert('Article title is required.');
+      return;
+    }
+
+    setSaving(true);
     const body = sanitizeHtml(editorRef.current?.innerHTML || current.body || '<p><br></p>');
-    const slug = uniqueSlug(current.slug || current.title || previousId, all, previousId);
-    const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    const updated = {
+    const draft = {
       ...current,
-      id: slug,
-      slug,
+      slug: current.slug || toSlug(current.title),
+      category: current.cat || current.category,
+      cat: current.cat || current.category,
       body,
-      status,
-      date: current.date || today,
       excerpt: current.excerpt || excerptFromBody(body),
-      createdAt: current.createdAt || Date.now(),
+      status,
     };
-    const next = [updated, ...all.filter((article) => article.id !== previousId && article.id !== slug && article.slug !== slug)];
-    saveUserArticles(next);
-    setArticles(next);
-    setCurrent(updated);
-    showToast?.(status === 'published' ? '✓ Article published!' : '✓ Draft saved.');
-    if (status === 'published') {
-      setLastPublishedUrl(`${window.location.origin}/articles/${slug}`);
-      setCopiedUrl(false);
-      setMode('list');
+
+    try {
+      const saved = await saveArticle(draft, status);
+      const normalized = normalizeForEditor(saved);
+      setCurrent(normalized);
+      await loadArticles();
+      showToast?.(status === 'published' ? 'Article published globally.' : 'Draft saved to database.');
+
+      if (status === 'published') {
+        setLastPublishedUrl(`${window.location.origin}${getArticlePath(saved)}`);
+        setCopiedUrl(false);
+        setMode('list');
+      }
+    } catch (err) {
+      window.alert(err.message || 'Unable to save article.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeArticle(id) {
+    if (!window.confirm('Delete this article from the database? This cannot be undone.')) return;
+
+    try {
+      await deleteArticle(id);
+      await loadArticles();
+      showToast?.('Article deleted.');
+    } catch (err) {
+      window.alert(err.message || 'Unable to delete article.');
     }
   }
 
@@ -255,17 +239,19 @@ export function ArticleEditor({ showToast }) {
     }
   }
 
-  function deleteArticle(id) {
-    if (!window.confirm('Delete this article? This cannot be undone.')) return;
-    const updated = getUserArticles().filter((article) => article.id !== id);
-    saveUserArticles(updated);
-    setArticles(updated);
-    showToast?.('Article deleted.');
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="admin-content-card">
+        <h2>Article database not configured</h2>
+        <p className="admin-muted">
+          Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, run `supabase/schema.sql`,
+          and deploy those environment variables to enable global publishing.
+        </p>
+      </div>
+    );
   }
 
   if (mode === 'list') {
-    const sorted = [...articles].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
     return (
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', gap: '1rem' }}>
@@ -274,12 +260,12 @@ export function ArticleEditor({ showToast }) {
               Articles
             </h2>
             <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              {articles.length} total · {articles.filter((article) => article.status === 'published').length} published · {articles.filter((article) => article.status === 'draft').length} drafts
+              {articles.length} database article{articles.length === 1 ? '' : 's'}
             </p>
           </div>
           <button
             type="button"
-            onClick={() => { setCurrent(createBlankArticle()); setMode('edit'); setCoverPreview(null); }}
+            onClick={() => { const blank = createBlankArticle(); setCurrent(blank); setCoverPreview(null); setMode('edit'); }}
             style={{
               background: 'linear-gradient(135deg, #1563B2, #14B8A6)',
               color: 'white',
@@ -341,15 +327,17 @@ export function ArticleEditor({ showToast }) {
           </div>
         ) : null}
 
-        {articles.length === 0 ? (
+        {loading ? <p className="admin-muted">Loading database articles...</p> : null}
+        {error ? <div className="admin-error-banner">{error}</div> : null}
+
+        {!loading && !articles.length ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)' }}>
-            <p style={{ fontSize: '2rem', marginBottom: '1rem' }}>✍️</p>
-            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '1.3rem' }}>No articles yet</p>
-            <p style={{ fontSize: '0.88rem', marginTop: '0.5rem' }}>Click "New Article" to start writing</p>
+            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '1.3rem' }}>No articles in the database yet</p>
+            <p style={{ fontSize: '0.88rem', marginTop: '0.5rem' }}>Create and publish one to make it globally visible.</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {sorted.map((article) => (
+            {articles.map((article) => (
               <div
                 key={article.id}
                 style={{
@@ -361,35 +349,35 @@ export function ArticleEditor({ showToast }) {
                   alignItems: 'center',
                   gap: '1rem',
                   boxShadow: 'var(--s1)',
-                  transition: 'box-shadow 0.2s',
                 }}
               >
                 {article.coverImage ? (
                   <img src={article.coverImage} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 'var(--r-sm)', flexShrink: 0 }} />
                 ) : (
-                  <div style={{ width: 64, height: 64, borderRadius: 'var(--r-sm)', background: 'var(--bg-sky-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>📄</div>
+                  <div style={{ width: 64, height: 64, borderRadius: 'var(--r-sm)', background: 'var(--bg-sky-light)', flexShrink: 0 }} />
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: '0.72rem', color: 'var(--teal-600)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.2rem' }}>
-                    {article.cat || 'Uncategorised'}
+                    {article.category || 'Uncategorised'}
                   </p>
                   <h3 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '1.1rem', color: 'var(--text-navy)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {article.title || 'Untitled'}
                   </h3>
                   <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                    {article.date || 'No date'} · {article.status === 'published' ? '🟢 Published' : '🟡 Draft'}
+                    {article.slug} · {article.status === 'published' ? 'Published' : 'Draft'}
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                  <button type="button" onClick={() => { setCurrent(article); setMode('edit'); setCoverPreview(article.coverImage); }}
+                  {article.status === 'published' ? (
+                    <a className="act-btn act-view" href={getArticlePath(article)} target="_blank" rel="noopener noreferrer">
+                      View
+                    </a>
+                  ) : null}
+                  <button type="button" onClick={() => { const normalized = normalizeForEditor(article); setCurrent(normalized); setCoverPreview(normalized.coverImage); setMode('edit'); }}
                     style={{ fontSize: '0.76rem', fontWeight: 600, padding: '0.32rem 0.75rem', borderRadius: 'var(--r-sm)', background: 'var(--bg-sky-light)', border: '1px solid var(--border)', color: 'var(--sky-700)', cursor: 'pointer' }}>
                     Edit
                   </button>
-                  <button type="button" onClick={() => { setCurrent(article); setMode('preview'); }}
-                    style={{ fontSize: '0.76rem', fontWeight: 600, padding: '0.32rem 0.75rem', borderRadius: 'var(--r-sm)', background: 'rgba(20,184,166,0.08)', border: '1px solid rgba(20,184,166,0.2)', color: 'var(--teal-600)', cursor: 'pointer' }}>
-                    Preview
-                  </button>
-                  <button type="button" onClick={() => deleteArticle(article.id)}
+                  <button type="button" onClick={() => removeArticle(article.id)}
                     style={{ fontSize: '0.76rem', fontWeight: 600, padding: '0.32rem 0.75rem', borderRadius: 'var(--r-sm)', background: '#FEE2E2', border: '1px solid #FECACA', color: '#B91C1C', cursor: 'pointer' }}>
                     Delete
                   </button>
@@ -408,14 +396,14 @@ export function ArticleEditor({ showToast }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
           <button type="button" onClick={() => setMode('list')}
             style={{ fontSize: '0.82rem', color: 'var(--sky-600)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-            ← Back to Articles
+            Back to Articles
           </button>
           <div style={{ display: 'flex', gap: '0.6rem' }}>
-            <button type="button" onClick={() => saveArticle('draft')}
+            <button type="button" disabled={saving} onClick={() => saveCurrent('draft')}
               style={{ fontSize: '0.82rem', fontWeight: 600, padding: '0.45rem 1.1rem', borderRadius: 'var(--r-full)', background: 'var(--bg-sky-light)', border: '1px solid var(--border)', color: 'var(--sky-700)', cursor: 'pointer' }}>
               Save Draft
             </button>
-            <button type="button" onClick={() => saveArticle('published')}
+            <button type="button" disabled={saving} onClick={() => saveCurrent('published')}
               style={{ fontSize: '0.82rem', fontWeight: 600, padding: '0.45rem 1.1rem', borderRadius: 'var(--r-full)', background: 'linear-gradient(135deg,#1563B2,#14B8A6)', color: 'white', border: 'none', cursor: 'pointer' }}>
               Publish
             </button>
@@ -426,81 +414,59 @@ export function ArticleEditor({ showToast }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
             <div style={{ gridColumn: '1/-1' }}>
               <label style={labelStyle}>Article Title *</label>
-              <input value={current.title} onChange={(event) => setCurrent((article) => ({ ...article, title: event.target.value }))}
+              <input value={current.title} onChange={(event) => setCurrent((article) => ({ ...article, title: event.target.value, slug: article.slug || toSlug(event.target.value) }))}
                 placeholder="Enter a compelling title..."
                 style={{ ...inputStyle, fontSize: '1.05rem', fontFamily: "'Cormorant Garamond',serif" }} />
             </div>
             <div>
-              <label style={labelStyle}>Category</label>
-              <input value={current.cat} onChange={(event) => setCurrent((article) => ({ ...article, cat: event.target.value }))}
-                placeholder="e.g. Internet Governance"
+              <label style={labelStyle}>Slug</label>
+              <input value={current.slug || ''} onChange={(event) => setCurrent((article) => ({ ...article, slug: toSlug(event.target.value) }))}
+                placeholder="auto-generated-from-title"
                 style={inputStyle} />
             </div>
             <div>
-              <label style={labelStyle}>Publication Date</label>
-              <input type="date" value={current.dateRaw || ''}
-                onChange={(event) => {
-                  const date = event.target.value ? new Date(event.target.value) : null;
-                  const formatted = date ? date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
-                  setCurrent((article) => ({ ...article, dateRaw: event.target.value, date: formatted }));
-                }}
+              <label style={labelStyle}>Category</label>
+              <input value={current.cat || current.category || ''} onChange={(event) => setCurrent((article) => ({ ...article, cat: event.target.value, category: event.target.value }))}
+                placeholder="e.g. Internet Governance"
                 style={inputStyle} />
             </div>
             <div style={{ gridColumn: '1/-1' }}>
-              <label style={labelStyle}>Excerpt / Summary <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>— shown on blog card</span></label>
-              <textarea value={current.excerpt} onChange={(event) => setCurrent((article) => ({ ...article, excerpt: event.target.value }))}
+              <label style={labelStyle}>Tags</label>
+              <input value={(current.tags || []).join(', ')} onChange={(event) => setCurrent((article) => ({ ...article, tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) }))}
+                placeholder="AI Governance, Digital Rights"
+                style={inputStyle} />
+            </div>
+            <div style={{ gridColumn: '1/-1' }}>
+              <label style={labelStyle}>Excerpt / Summary</label>
+              <textarea value={current.excerpt || ''} onChange={(event) => setCurrent((article) => ({ ...article, excerpt: event.target.value }))}
                 placeholder="One or two sentences summarising the article..."
                 rows={3}
                 style={{ ...inputStyle, resize: 'vertical', minHeight: 80 }} />
             </div>
+            <div style={{ gridColumn: '1/-1' }}>
+              <label style={labelStyle}>SEO Description</label>
+              <textarea value={current.seo?.metaDescription || ''} onChange={(event) => setCurrent((article) => ({ ...article, seo: { ...article.seo, metaDescription: event.target.value } }))}
+                rows={2}
+                style={{ ...inputStyle, resize: 'vertical', minHeight: 70 }} />
+            </div>
           </div>
 
           <div>
-            <label style={labelStyle}>Cover Image <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>— optional, shown in article header</span></label>
+            <label style={labelStyle}>Cover Image URL or Upload</label>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-              {coverPreview ? (
-                <div style={{ position: 'relative' }}>
-                  <img src={coverPreview} alt="Cover" style={{ width: 120, height: 72, objectFit: 'cover', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)' }} />
-                  <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.35rem' }}>
-                    {['cover', 'contain', 'fill'].map((fit) => (
-                      <button key={fit} type="button" onClick={() => setCurrent((article) => ({ ...article, coverFit: fit }))}
-                        style={{
-                          fontSize: '0.65rem',
-                          padding: '0.15rem 0.45rem',
-                          borderRadius: 'var(--r-sm)',
-                          fontWeight: 600,
-                          background: current.coverFit === fit ? 'var(--sky-600)' : 'var(--bg-sky-light)',
-                          color: current.coverFit === fit ? 'white' : 'var(--sky-700)',
-                          border: '1px solid var(--border)',
-                          cursor: 'pointer',
-                        }}>
-                        {fit}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              {coverPreview || current.coverImage ? (
+                <img src={coverPreview || current.coverImage} alt="Cover" style={{ width: 120, height: 72, objectFit: 'cover', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)' }} />
               ) : null}
-              <div
-                onClick={() => coverInputRef.current?.click()}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => { event.preventDefault(); handleCoverFile(event.dataTransfer.files[0]); }}
-                style={{
-                  flex: 1,
-                  border: '2px dashed var(--border)',
-                  borderRadius: 'var(--r-md)',
-                  padding: '1rem',
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                  transition: 'border-color 0.2s, background 0.2s',
-                }}
-              >
-                <p style={{ fontSize: '0.84rem', color: 'var(--text-mid)', margin: 0 }}>
-                  <strong style={{ color: 'var(--sky-600)' }}>Click to upload</strong> or drag & drop
-                </p>
-                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
-                  JPG, PNG, WEBP — recommended 1200×630px
-                </p>
-              </div>
+              <input
+                value={current.coverImage || ''}
+                onChange={(event) => { setCoverPreview(event.target.value); setCurrent((article) => ({ ...article, coverImage: event.target.value })); }}
+                placeholder="https://..."
+                style={inputStyle}
+              />
+              <button type="button" onClick={() => coverInputRef.current?.click()}
+                style={{ flexShrink: 0, padding: '0.55rem 0.9rem', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+                Upload
+              </button>
               <input ref={coverInputRef} type="file" accept="image/*" style={{ display: 'none' }}
                 onChange={(event) => handleCoverFile(event.target.files[0])} />
             </div>
@@ -521,14 +487,13 @@ export function ArticleEditor({ showToast }) {
               <div key={index} style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 4px' }} />
             ) : (
               <button
-                key={index}
+                key={button.cmd + (button.arg || '')}
                 type="button"
                 title={button.title}
                 onMouseDown={(event) => {
                   event.preventDefault();
                   editorRef.current?.focus();
-                  if (button.custom) button.custom(editorRef);
-                  else if (button.arg) document.execCommand(button.cmd, false, button.arg);
+                  if (button.arg) document.execCommand(button.cmd, false, button.arg);
                   else document.execCommand(button.cmd);
                   syncEditorBody();
                 }}
@@ -539,59 +504,25 @@ export function ArticleEditor({ showToast }) {
                   borderRadius: 'var(--r-sm)',
                   border: '1px solid transparent',
                   background: 'transparent',
-                  fontSize: button.icon.length > 2 ? '0.72rem' : '0.84rem',
+                  fontSize: '0.78rem',
                   fontWeight: 700,
                   color: 'var(--text-mid)',
                   cursor: 'pointer',
-                  fontStyle: button.cmd === 'italic' ? 'italic' : 'normal',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'background 0.15s, border-color 0.15s',
                 }}
               >
                 {button.icon}
               </button>
             ))}
-            <div style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 4px' }} />
             <button
               type="button"
               title="Insert Callout Box"
               onMouseDown={(event) => {
                 event.preventDefault();
-                insertCallout();
+                insertHtmlAtSelection('<div class="art-callout"><p><strong>Key point:</strong> Add your callout text here.</p></div><p><br></p>');
               }}
               style={{ padding: '0 8px', height: 30, borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: 'rgba(59,154,232,0.08)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--sky-700)', cursor: 'pointer' }}
             >
               + Callout
-            </button>
-            <button
-              type="button"
-              title="Insert Image in Body"
-              onMouseDown={(event) => {
-                event.preventDefault();
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = 'image/*';
-                input.onchange = () => {
-                  const file = input.files[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = (readerEvent) => {
-                    editorRef.current?.focus();
-                    insertHtmlAtSelection(
-                      `<figure style="margin:1.5rem 0;text-align:center;">
-                        <img src="${readerEvent.target.result}" style="max-width:100%;height:auto;border-radius:var(--r-md);box-shadow:var(--s2);object-fit:${current.coverFit || 'cover'}" alt="" />
-                        <figcaption style="font-size:0.78rem;color:var(--text-muted);margin-top:0.5rem;font-style:italic;">Caption (click to edit)</figcaption>
-                      </figure><p><br></p>`);
-                  };
-                  reader.readAsDataURL(file);
-                };
-                input.click();
-              }}
-              style={{ padding: '0 8px', height: 30, borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: 'rgba(20,184,166,0.08)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--teal-600)', cursor: 'pointer' }}
-            >
-              + Image
             </button>
           </div>
 
@@ -616,37 +547,8 @@ export function ArticleEditor({ showToast }) {
               {wordCount(current.body)} words · {readingTime(current.body)} min read
             </span>
             <span style={{ fontSize: '0.76rem', color: current.status === 'published' ? 'var(--mint-600)' : 'var(--text-muted)', fontWeight: 600 }}>
-              {current.status === 'published' ? '🟢 Published' : '🟡 Draft'}
+              {saving ? 'Saving...' : current.status === 'published' ? 'Published' : 'Draft'}
             </span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (mode === 'preview' && current) {
-    return (
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <button type="button" onClick={() => setMode('edit')}
-            style={{ fontSize: '0.82rem', color: 'var(--sky-600)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-            ← Back to Editor
-          </button>
-          <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Preview — as it appears on site</span>
-        </div>
-        <div style={{ background: 'white', borderRadius: 'var(--r-lg)', boxShadow: 'var(--s2)', overflow: 'hidden', maxWidth: 800, margin: '0 auto' }}>
-          {current.coverImage ? (
-            <img src={current.coverImage} alt="" style={{ width: '100%', height: 280, objectFit: current.coverFit || 'cover' }} />
-          ) : null}
-          <div style={{ padding: '2.5rem' }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--teal-600)', textTransform: 'uppercase', letterSpacing: '0.09em' }}>{current.cat}</span>
-            <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 'clamp(1.8rem,4vw,2.6rem)', color: 'var(--text-navy)', margin: '0.6rem 0 1rem', lineHeight: 1.2 }}>
-              {current.title}
-            </h1>
-            <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '2rem' }}>
-              {current.date} · {readingTime(current.body)} min read
-            </p>
-            <div className="art-body" dangerouslySetInnerHTML={{ __html: sanitizeHtml(current.body) }} />
           </div>
         </div>
       </div>
@@ -655,5 +557,3 @@ export function ArticleEditor({ showToast }) {
 
   return null;
 }
-
-export { STORAGE_KEY as USER_ARTICLES_STORAGE_KEY };

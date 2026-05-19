@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 const variants = {
   hidden: { opacity: 0, y: 14, scale: 0.998, filter: 'blur(4px)' },
@@ -14,17 +14,14 @@ const variants = {
 
 export function PageTransition({ children, pageKey }) {
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={pageKey}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        variants={variants}
-        className="page active"
-      >
-        {children}
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      key={pageKey}
+      initial="hidden"
+      animate="visible"
+      variants={variants}
+      className="page active"
+    >
+      {children}
+    </motion.div>
   );
 }

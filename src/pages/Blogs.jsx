@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SEO } from '../components/seo/SEO';
 import { Eyebrow } from '../components/ui/Eyebrow';
 import { FadeIn } from '../components/ui/FadeIn';
 import { SplitText } from '../components/ui/SplitText';
 import { TiltCard } from '../components/ui/TiltCard';
-import { getArticlePath, getPublishedArticles } from '../data/articleStore';
+import { getArticlePath, getPublishedArticles, subscribeToArticleChanges } from '../services/articleService';
+import { isSupabaseConfigured } from '../services/supabaseClient';
 
 function BlogCard({ article, index }) {
   return (
@@ -31,7 +32,36 @@ function BlogCard({ article, index }) {
 export function Blogs() {
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState('all');
-  const articles = useMemo(() => getPublishedArticles(), []);
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    const loadArticles = async () => {
+      setLoading(true);
+      try {
+        const next = await getPublishedArticles();
+        if (active) {
+          setArticles(next);
+          setError('');
+        }
+      } catch (err) {
+        if (active) setError(err.message || 'Unable to load articles.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    loadArticles();
+    const unsubscribe = subscribeToArticleChanges(loadArticles);
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   const tags = useMemo(
     () => ['all', ...new Set(articles.flatMap((article) => [article.tag, ...(article.tags || [])]).filter(Boolean))],
@@ -98,7 +128,10 @@ export function Blogs() {
             ))}
           </div>
 
-          {!visible.length ? <p className="no-comments">No articles match that search.</p> : null}
+          {!isSupabaseConfigured ? <p className="no-comments">Article database is not configured yet.</p> : null}
+          {loading ? <p className="no-comments">Loading articles...</p> : null}
+          {error ? <p className="no-comments">{error}</p> : null}
+          {!loading && !error && !visible.length ? <p className="no-comments">No articles match that search.</p> : null}
         </div>
       </section>
     </>

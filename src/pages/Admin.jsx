@@ -1,7 +1,7 @@
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
 import { ArticleEditor } from './admin/ArticleEditor';
-import { getAllArticlesMap } from '../data/articleStore';
 import {
   getComments,
   getContactMessages,
@@ -11,8 +11,14 @@ import {
 import { AuthorAvatar } from '../components/ui/AuthorAvatar';
 import { PERSON } from '../data/siteData';
 import { getProfile, saveProfile } from '../utils/profileStorage';
+import {
+  getCurrentSession,
+  signInAdmin,
+  signOutAdmin,
+  subscribeToAuthChanges,
+} from '../services/authService';
+import { isSupabaseConfigured } from '../services/supabaseClient';
 
-const ADMIN_PASSWORD_KEY = 'barkha_admin_pw';
 const SETTINGS_KEY = 'barkha_settings_v1';
 const PAGE_SIZE = 10;
 
@@ -59,14 +65,6 @@ const INITIAL_GRADIENTS = [
 function truncate(value, max) {
   const text = String(value || '');
   return text.length > max ? `${text.slice(0, max).trim()}...` : text;
-}
-
-function readAdminPassword() {
-  try {
-    return localStorage.getItem(ADMIN_PASSWORD_KEY) || 'admin123';
-  } catch {
-    return 'admin123';
-  }
 }
 
 function getSettings() {
@@ -280,7 +278,6 @@ function CommentsPanel({ comments, setStatus, remove, bulkUpdate, bulkDelete }) 
   const [articleFilter, setArticleFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState([]);
-  const articleMap = useMemo(() => getAllArticlesMap({ includeDrafts: true }), []);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -432,7 +429,7 @@ function CommentsPanel({ comments, setStatus, remove, bulkUpdate, bulkDelete }) 
                         </div>
                       </div>
                     </td>
-                    <td title={articleMap[comment.articleId]?.title || articleTitle(comment.articleId)}>{truncate(articleMap[comment.articleId]?.title || articleTitle(comment.articleId), 34)}</td>
+                    <td title={articleTitle(comment.articleId)}>{truncate(articleTitle(comment.articleId), 34)}</td>
                     <td title={comment.text}>{truncate(comment.text, 90)}</td>
                     <td>{formatCommentDate(comment)}</td>
                     <td><StatusBadge status={status} /></td>
@@ -674,39 +671,11 @@ function MessagesPanel({ messages, removeMessage }) {
 
 function SettingsPanel({ showToast }) {
   const [settings, setSettings] = useState(() => getSettings());
-  const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' });
-  const [passwordError, setPasswordError] = useState('');
 
   const updateSetting = (key) => {
     const next = { ...settings, [key]: !settings[key] };
     setSettings(next);
     saveSettings(next);
-  };
-
-  const updatePasswordField = (key) => (event) => {
-    setPasswords((current) => ({ ...current, [key]: event.target.value }));
-    setPasswordError('');
-  };
-
-  const updatePassword = (event) => {
-    event.preventDefault();
-    if (passwords.current !== readAdminPassword()) {
-      setPasswordError('Current password is incorrect.');
-      return;
-    }
-    if (passwords.next.length < 6) {
-      setPasswordError('New password must be at least 6 characters.');
-      return;
-    }
-    if (passwords.next !== passwords.confirm) {
-      setPasswordError('New password and confirmation do not match.');
-      return;
-    }
-
-    localStorage.setItem(ADMIN_PASSWORD_KEY, passwords.next);
-    setPasswords({ current: '', next: '', confirm: '' });
-    setPasswordError('');
-    showToast('Password updated successfully');
   };
 
   return (
@@ -736,43 +705,35 @@ function SettingsPanel({ showToast }) {
         </div>
       </div>
 
-      <form className="admin-content-card admin-password-card" onSubmit={updatePassword}>
+      <div className="admin-content-card admin-password-card">
         <div className="admin-card-head">
           <div>
-            <h3>Change Password</h3>
-            <p>Login uses the local password stored in this browser.</p>
+            <h3>Authentication</h3>
+            <p>Admin access is managed through Supabase Auth and the admin_users table.</p>
           </div>
         </div>
-        {passwordError ? <div className="admin-error-banner">{passwordError}</div> : null}
-        <div className="admin-password-grid">
-          <div className="form-field">
-            <label htmlFor="current-password">Current password</label>
-            <input id="current-password" className="form-input" type="password" value={passwords.current} onChange={updatePasswordField('current')} />
-          </div>
-          <div className="form-field">
-            <label htmlFor="new-password">New password</label>
-            <input id="new-password" className="form-input" type="password" value={passwords.next} onChange={updatePasswordField('next')} />
-          </div>
-          <div className="form-field">
-            <label htmlFor="confirm-password">Confirm password</label>
-            <input id="confirm-password" className="form-input" type="password" value={passwords.confirm} onChange={updatePasswordField('confirm')} />
-          </div>
-        </div>
-        <button className="btn btn-primary" type="submit">
-          Update Password
-        </button>
-      </form>
+        <p className="admin-muted">
+          Create or update admin accounts in Supabase Auth. To grant publishing access, add the user's
+          Auth UUID to <code>public.admin_users</code>.
+        </p>
+      </div>
     </div>
   );
 }
 
 export function Admin({ showToast, go }) {
   const notify = (message) => showToast?.(message);
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [password, setPassword] = useState('');
+  const location = useLocation();
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [credentials, setCredentials] = useState({ email: '', password: '' });
   const [loginError, setLoginError] = useState(false);
   const [shake, setShake] = useState(false);
-  const [activeSection, setActiveSection] = useState('overview');
+  const [activeSection, setActiveSection] = useState(
+    location.pathname.includes('/admin/articles') || location.pathname.includes('/admin/new-article')
+      ? 'editor'
+      : 'overview',
+  );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [comments, setComments] = useState(() => getComments());
   const [messages, setMessages] = useState(() => getContactMessages());
@@ -788,18 +749,48 @@ export function Admin({ showToast, go }) {
     [comments],
   );
 
-  const login = (event) => {
+  useEffect(() => {
+    let active = true;
+
+    const loadSession = async () => {
+      try {
+        const currentSession = await getCurrentSession();
+        if (active) setSession(currentSession);
+      } catch {
+        if (active) setSession(null);
+      } finally {
+        if (active) setAuthLoading(false);
+      }
+    };
+
+    loadSession();
+    const unsubscribe = subscribeToAuthChanges((nextSession) => setSession(nextSession));
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (location.pathname.includes('/admin/articles') || location.pathname.includes('/admin/new-article')) {
+      setActiveSection('editor');
+    }
+  }, [location.pathname]);
+
+  const login = async (event) => {
     event.preventDefault();
-    if (password === readAdminPassword()) {
-      setLoggedIn(true);
-      setPassword('');
+    try {
+      const nextSession = await signInAdmin(credentials.email, credentials.password);
+      setSession(nextSession);
+      setCredentials({ email: '', password: '' });
       setLoginError(false);
       return;
+    } catch {
+      setLoginError(true);
+      setShake(true);
+      setTimeout(() => setShake(false), 450);
     }
-
-    setLoginError(true);
-    setShake(true);
-    setTimeout(() => setShake(false), 450);
   };
 
   const commitComments = (next, message) => {
@@ -847,8 +838,9 @@ export function Admin({ showToast, go }) {
     notify('Message deleted.');
   };
 
-  const logout = () => {
-    setLoggedIn(false);
+  const logout = async () => {
+    await signOutAdmin();
+    setSession(null);
     setActiveSection('overview');
     setSidebarOpen(false);
   };
@@ -874,7 +866,19 @@ export function Admin({ showToast, go }) {
     }
   };
 
-  if (!loggedIn) {
+  if (authLoading) {
+    return (
+      <div className="admin-login-screen">
+        <div className="admin-login-box">
+          <AuthorAvatar size={64} style={{ margin: '0 auto 1rem' }} />
+          <h2>Admin Portal</h2>
+          <p className="admin-login-copy">Checking secure session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
     return (
       <div className="admin-login-screen">
         <motion.form
@@ -885,10 +889,27 @@ export function Admin({ showToast, go }) {
         >
           <AuthorAvatar size={64} style={{ margin: '0 auto 1rem' }} />
           <h2>Admin Portal</h2>
-          <p className="admin-login-copy">{PERSON.nameEn} {'\u00B7'} {PERSON.website}</p>
+          <p className="admin-login-copy">{isSupabaseConfigured ? `${PERSON.nameEn} ${'\u00B7'} Supabase Auth` : 'Supabase is not configured.'}</p>
           {loginError ? (
-            <div className="admin-error-banner">Incorrect password. Please try again.</div>
+            <div className="admin-error-banner">Login failed. Check admin email/password and admin_users access.</div>
           ) : null}
+          {!isSupabaseConfigured ? (
+            <div className="admin-error-banner">Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY before using admin publishing.</div>
+          ) : null}
+          <div className="form-field u-mb-12">
+            <label htmlFor="admin-email">Email</label>
+            <input
+              className="form-input"
+              id="admin-email"
+              type="email"
+              placeholder="admin@example.com"
+              value={credentials.email}
+              onChange={(event) => {
+                setCredentials((current) => ({ ...current, email: event.target.value }));
+                setLoginError(false);
+              }}
+            />
+          </div>
           <div className="form-field u-mb-12">
             <label htmlFor="admin-pw">Password</label>
             <input
@@ -896,14 +917,14 @@ export function Admin({ showToast, go }) {
               id="admin-pw"
               type="password"
               placeholder="Enter your password"
-              value={password}
+              value={credentials.password}
               onChange={(event) => {
-                setPassword(event.target.value);
+                setCredentials((current) => ({ ...current, password: event.target.value }));
                 setLoginError(false);
               }}
             />
           </div>
-          <button className="admin-login-btn" type="submit">
+          <button className="admin-login-btn" type="submit" disabled={!isSupabaseConfigured}>
             Login
           </button>
         </motion.form>

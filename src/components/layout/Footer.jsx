@@ -6,8 +6,8 @@ const FOOTER_NAV = [
   ['Articles', '/articles'],
   ['Portfolio', '/portfolio'],
   ['Media', '/media'],
+  ['Gallery', '/gallery'],
   ['Events', '/events'],
-  ['Publications', '/publications'],
   ['About', '/about'],
   ['Admin', '/admin'],
 ];

@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Link2, Linkedin, MessageCircle } from 'lucide-react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { SEO } from '../components/seo/SEO';
 import {
-  getArticleById,
   getArticleBySlug,
   getArticlePath,
   getRelatedArticles,
-} from '../data/articleStore';
+} from '../services/articleService';
 import { addComment, getComments } from '../data/comments';
 import { AuthorAvatar } from '../components/ui/AuthorAvatar';
 import { ReadingProgress } from '../components/ui/ReadingProgress';
@@ -165,7 +164,26 @@ function ShareActions({ article }) {
 }
 
 function RelatedArticles({ article }) {
-  const related = useMemo(() => getRelatedArticles(article, 3), [article]);
+  const [related, setRelated] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadRelated = async () => {
+      try {
+        const next = await getRelatedArticles(article, 3);
+        if (active) setRelated(next);
+      } catch {
+        if (active) setRelated([]);
+      }
+    };
+
+    loadRelated();
+
+    return () => {
+      active = false;
+    };
+  }, [article?.id]);
 
   if (!related.length) return null;
 
@@ -373,18 +391,40 @@ function CommentForm({ articleId, onSubmitted, showToast }) {
   );
 }
 
-export function Article({ articleId, onBack, showToast }) {
+export function Article({ onBack, showToast }) {
   const { slug } = useParams();
-  const navigate = useNavigate();
-  const article = slug ? getArticleBySlug(slug) : getArticleById(articleId);
   const articleBodyRef = useRef(null);
+  const [article, setArticle] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [articleError, setArticleError] = useState('');
   const [profile, setProfile] = useState(() => getProfile());
   const [comments, setComments] = useState([]);
 
   useEffect(() => {
-    if (!article) return;
-    setComments(getComments());
-  }, [article]);
+    let active = true;
+
+    const loadArticle = async () => {
+      setLoading(true);
+      setArticleError('');
+      try {
+        const found = await getArticleBySlug(slug);
+        if (active) {
+          setArticle(found);
+          setComments(getComments());
+        }
+      } catch (err) {
+        if (active) setArticleError(err.message || 'Unable to load article.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    loadArticle();
+
+    return () => {
+      active = false;
+    };
+  }, [slug]);
 
   useEffect(() => {
     const syncProfile = () => setProfile(getProfile());
@@ -405,19 +445,32 @@ export function Article({ articleId, onBack, showToast }) {
     [article?.id, comments],
   );
 
+  if (loading) {
+    return (
+      <div className="page-hero">
+        <div className="page-hero-inner">
+          <div className="section-eyebrow">Article</div>
+          <h1 className="heading-xl">Loading article...</h1>
+        </div>
+      </div>
+    );
+  }
+
   if (!article) {
     return (
       <>
         <SEO
           title="Article Not Found"
-          description="The article you are looking for could not be found."
+          description={articleError || 'The article you are looking for could not be found.'}
           path={slug ? `/articles/${slug}` : '/articles'}
         />
         <div className="page-hero">
           <div className="page-hero-inner">
             <div className="section-eyebrow">Article</div>
             <h1 className="heading-xl">Article not found</h1>
-            <p className="subtext u-subtext-center">This article may have moved, been unpublished, or the link may be incorrect.</p>
+            <p className="subtext u-subtext-center">
+              {articleError || 'This article may have moved, been unpublished, or the link may be incorrect.'}
+            </p>
             <Link className="btn btn-primary" to="/articles">Back to Articles</Link>
           </div>
         </div>
@@ -429,7 +482,6 @@ export function Article({ articleId, onBack, showToast }) {
   const metaDescription = article.seo?.metaDescription || article.excerpt || '';
   const articleImage = article.seo?.openGraphImage || article.coverImage || article.featuredImage || '';
   const tags = [...new Set([article.cat, ...(article.tags || [])].filter(Boolean))];
-  const handleBack = onBack || (() => navigate('/articles'));
 
   return (
     <div className="article-page-wrap">
@@ -451,9 +503,9 @@ export function Article({ articleId, onBack, showToast }) {
 
       <header className="article-hero">
         <div className="article-inner">
-          <button className="back-btn" type="button" onClick={handleBack}>
+          <Link className="back-btn" to="/articles" onClick={onBack}>
             {'\u2190'} Back to Articles
-          </button>
+          </Link>
           <div className="art-cat">{article.cat}</div>
           <h1 className="art-title">{article.title}</h1>
           {article.subtitle ? <p className="art-subtitle">{article.subtitle}</p> : null}

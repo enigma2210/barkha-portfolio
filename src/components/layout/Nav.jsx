@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useMotionValue, useSpring } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { PERSON } from '../../data/siteData';
 import { useScrolled } from '../../hooks/useScrolled';
 
@@ -9,21 +9,21 @@ const LINKS = [
   { path: '/articles', label: 'Articles' },
   { path: '/portfolio', label: 'Portfolio' },
   { path: '/media', label: 'Media' },
+  { path: '/gallery', label: 'Gallery' },
   { path: '/events', label: 'Events' },
-  { path: '/publications', label: 'Publications' },
   { path: '/about', label: 'About' },
   { path: '/contact', label: 'Contact' },
 ];
 
-const MotionLink = motion(Link);
-
 function isActivePath(pathname, itemPath) {
   if (itemPath === '/') return pathname === '/';
   if (itemPath === '/articles') return pathname.startsWith('/articles') || pathname.startsWith('/blog');
+  if (itemPath === '/media') return pathname === '/media';
+  if (itemPath === '/gallery') return pathname === '/gallery';
   return pathname === itemPath || pathname.startsWith(`${itemPath}/`);
 }
 
-function MagneticLink({ item, active, onNavigate }) {
+function MagneticLink({ item, onNavigate }) {
   const x = useSpring(useMotionValue(0), { stiffness: 300, damping: 20 });
   const y = useSpring(useMotionValue(0), { stiffness: 300, damping: 20 });
 
@@ -41,16 +41,18 @@ function MagneticLink({ item, active, onNavigate }) {
   };
 
   return (
-    <MotionLink
+    <NavLink
       to={item.path}
-      style={{ x, y }}
+      end={item.path === '/'}
       onMouseMove={handleMouseMove}
       onMouseLeave={reset}
       onClick={onNavigate}
-      className={active ? 'nav-link active magnetic' : 'nav-link magnetic'}
+      className={({ isActive }) => (isActive ? 'nav-link active magnetic' : 'nav-link magnetic')}
     >
-      {item.label}
-    </MotionLink>
+      <motion.span style={{ x, y, display: 'inline-block' }}>
+        {item.label}
+      </motion.span>
+    </NavLink>
   );
 }
 
@@ -93,7 +95,7 @@ export function Nav() {
         <ul className="nav-links">
           {LINKS.map((item) => (
             <li key={item.path}>
-              <MagneticLink item={item} active={isActivePath(location.pathname, item.path)} onNavigate={closeMenu} />
+              <MagneticLink item={item} onNavigate={closeMenu} />
             </li>
           ))}
         </ul>
@@ -135,14 +137,19 @@ export function Nav() {
             transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
           >
             {LINKS.map((item) => (
-              <Link
+              <NavLink
                 key={item.path}
                 to={item.path}
-                className={isActivePath(location.pathname, item.path) ? 'mobile-menu-link active' : 'mobile-menu-link'}
+                end={item.path === '/'}
+                className={({ isActive }) => (
+                  isActive || isActivePath(location.pathname, item.path)
+                    ? 'mobile-menu-link active'
+                    : 'mobile-menu-link'
+                )}
                 onClick={closeMenu}
               >
                 {item.label}
-              </Link>
+              </NavLink>
             ))}
           </motion.div>
         ) : null}
