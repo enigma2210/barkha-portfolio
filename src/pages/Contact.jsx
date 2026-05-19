@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { saveContactMessage } from '../data/comments';
 import { PERSON } from '../data/siteData';
+import { SEO } from '../components/seo/SEO';
 import { Eyebrow } from '../components/ui/Eyebrow';
 import { SplitText } from '../components/ui/SplitText';
 
@@ -33,6 +34,11 @@ export function Contact({ showToast }) {
 
   return (
     <>
+      <SEO
+        title="Contact"
+        description="Contact Barkha Manral for collaborations in Internet governance, digital rights research, tech policy, mentoring, and community programs."
+        path="/contact"
+      />
       <div className="page-hero">
         <div className="page-hero-inner">
           <Eyebrow className="u-justify-center">Let's Connect</Eyebrow>

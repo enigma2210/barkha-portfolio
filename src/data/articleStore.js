@@ -2,16 +2,12 @@ import { ARTS } from './articles';
 import { PERSON } from './siteData';
 import { sanitizeHtml } from '../utils/sanitizeHtml';
 import { getUserArticles } from '../pages/admin/ArticleEditor';
+import { toSlug } from '../utils/urlRouter';
 
 const ARTICLE_STORE_KEY = 'barkha_articles_v1';
 
 function slugify(value) {
-  return String(value || '')
-    .toLowerCase()
-    .trim()
-    .replace(/['"]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || `article-${Date.now()}`;
+  return toSlug(value) || `article-${Date.now()}`;
 }
 
 function stripHtml(value) {
@@ -29,7 +25,7 @@ export function buildExcerpt(html, fallback = '') {
 }
 
 function normalizeArticle(article) {
-  const slug = slugify(article.slug || article.title);
+  const slug = slugify(article.slug || article.title || article.id);
   const body = sanitizeHtml(article.body || '');
   const tags = Array.isArray(article.tags)
     ? article.tags
@@ -56,6 +52,8 @@ function normalizeArticle(article) {
     tag: tags[0] || article.tag || '',
     tags,
     featuredImage: article.featuredImage || '',
+    coverImage: article.coverImage || article.featuredImage || '',
+    coverFit: article.coverFit || 'cover',
     authorName: article.authorName || PERSON.nameEn,
     readingTime: article.readingTime || estimateReadingTime(body),
     status: article.status || 'draft',
@@ -70,12 +68,45 @@ function normalizeArticle(article) {
   };
 }
 
+function normalizeStaticArticle(key, article) {
+  const body = sanitizeHtml(article.body || '');
+  const category = article.category || article.cat || 'Policy';
+  const tags = Array.isArray(article.tags) ? article.tags : [category].filter(Boolean);
+  const slug = slugify(article.slug || article.title || key);
+
+  return {
+    ...article,
+    id: key,
+    slug,
+    cat: category,
+    category,
+    tags,
+    tag: article.tag || tags[0] || category,
+    body,
+    excerpt: article.excerpt || buildExcerpt(body, article.subtitle),
+    featuredImage: article.featuredImage || article.coverImage || '',
+    coverImage: article.coverImage || article.featuredImage || '',
+    coverFit: article.coverFit || 'cover',
+    authorName: article.authorName || PERSON.nameEn,
+    readingTime: article.readingTime || estimateReadingTime(body),
+    status: 'published',
+    seo: {
+      metaTitle: article.seo?.metaTitle || article.metaTitle || article.title || '',
+      metaDescription: article.seo?.metaDescription || article.metaDescription || article.excerpt || '',
+      openGraphImage: article.seo?.openGraphImage || article.openGraphImage || article.featuredImage || article.coverImage || '',
+      canonicalUrl: article.seo?.canonicalUrl || article.canonicalUrl || '',
+    },
+  };
+}
+
 function normalizeUserArticle(article) {
   const body = sanitizeHtml(article.body || '');
   const category = article.cat || article.category || 'Uncategorised';
+  const slug = slugify(article.slug || article.title || article.id);
+
   return {
-    id: article.id || slugify(article.title),
-    slug: article.id || slugify(article.title),
+    id: article.id || slug,
+    slug,
     title: article.title || 'Untitled Article',
     subtitle: '',
     cat: category,
@@ -90,7 +121,7 @@ function normalizeUserArticle(article) {
     body,
     tag: category,
     tags: article.tags || [category],
-    featuredImage: article.coverImage || '',
+    featuredImage: article.coverImage || article.featuredImage || '',
     coverImage: article.coverImage || '',
     coverFit: article.coverFit || 'cover',
     authorName: PERSON.nameEn,
@@ -102,11 +133,33 @@ function normalizeUserArticle(article) {
   };
 }
 
+export function getStaticArticles() {
+  return Object.entries(ARTS).map(([key, article]) => normalizeStaticArticle(key, article));
+}
+
 function getPublishedUserArticles() {
   return getUserArticles()
     .filter((article) => article.status === 'published')
     .map(normalizeUserArticle)
     .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+}
+
+function getArticleTimestamp(article) {
+  const numericCreated = Number(article.createdAt || 0);
+  if (numericCreated) return numericCreated;
+
+  const parsed = Date.parse(article.publishDate || article.date || article.updatedAt || '');
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function uniqueArticles(articles) {
+  const bySlug = new Map();
+
+  articles.forEach((article) => {
+    bySlug.set(article.slug || article.id, article);
+  });
+
+  return Array.from(bySlug.values());
 }
 
 export function getStoredArticles() {
@@ -141,34 +194,75 @@ export function getEditableArticles() {
 }
 
 export function getPublishedArticles() {
-  return [
-    ...getPublishedUserArticles(),
+  return uniqueArticles([
+    ...getStaticArticles(),
     ...getStoredArticles().filter((article) => article.status === 'published'),
-  ].sort((a, b) => {
-    const bTime = Number(b.createdAt || 0) || Date.parse(b.updatedAt || b.publishDate);
-    const aTime = Number(a.createdAt || 0) || Date.parse(a.updatedAt || a.publishDate);
-    return bTime - aTime;
-  });
+    ...getPublishedUserArticles(),
+  ]).sort((a, b) => getArticleTimestamp(b) - getArticleTimestamp(a));
 }
 
 export function getAllArticlesMap({ includeDrafts = false } = {}) {
   const local = includeDrafts
-    ? [...getUserArticles().map(normalizeUserArticle), ...getStoredArticles()]
+    ? [
+      ...getStaticArticles(),
+      ...getStoredArticles(),
+      ...getUserArticles().map(normalizeUserArticle),
+    ]
     : getPublishedArticles();
-  return local.reduce(
-    (acc, article) => ({ ...acc, [article.slug]: article }),
-    { ...ARTS },
-  );
+
+  return local.reduce((acc, article) => {
+    acc[article.id] = article;
+    acc[article.slug] = article;
+    return acc;
+  }, {});
 }
 
 export function getPublicArticlesArray() {
-  const merged = getAllArticlesMap();
-  return Object.values(merged);
+  return getPublishedArticles();
 }
 
 export function getArticleById(id) {
   const articles = getAllArticlesMap();
-  return articles[id] || articles.dpdp;
+  return articles[id] || null;
+}
+
+export function getArticleBySlug(slug) {
+  const raw = String(slug || '');
+  let decoded = raw;
+
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    decoded = raw;
+  }
+
+  const cleanSlug = toSlug(decoded);
+  const articles = getAllArticlesMap();
+  return articles[raw] || articles[decoded] || articles[cleanSlug] || null;
+}
+
+export function getArticlePath(articleOrSlug) {
+  const slug = typeof articleOrSlug === 'string'
+    ? toSlug(articleOrSlug)
+    : articleOrSlug?.slug || toSlug(articleOrSlug?.title || articleOrSlug?.id);
+
+  return `/articles/${slug}`;
+}
+
+export function getRelatedArticles(article, limit = 3) {
+  if (!article) return [];
+
+  const currentTags = new Set([article.cat, article.category, article.tag, ...(article.tags || [])].filter(Boolean));
+
+  return getPublishedArticles()
+    .filter((item) => item.slug !== article.slug && item.id !== article.id)
+    .map((item) => {
+      const itemTags = [item.cat, item.category, item.tag, ...(item.tags || [])].filter(Boolean);
+      const score = itemTags.reduce((total, tag) => total + (currentTags.has(tag) ? 1 : 0), 0);
+      return { ...item, relatedScore: score };
+    })
+    .sort((a, b) => b.relatedScore - a.relatedScore || getArticleTimestamp(b) - getArticleTimestamp(a))
+    .slice(0, limit);
 }
 
 export { ARTICLE_STORE_KEY };

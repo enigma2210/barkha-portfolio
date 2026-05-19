@@ -1,18 +1,27 @@
 import { AnimatePresence, motion, useMotionValue, useSpring } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { PERSON } from '../../data/siteData';
 import { useScrolled } from '../../hooks/useScrolled';
 
 const LINKS = [
-  { page: 'home', label: 'Home' },
-  { page: 'blogs', label: 'Blogs' },
-  { page: 'portfolio', label: 'My Portfolio' },
-  { page: 'gallery', label: 'Gallery' },
-  { page: 'about', label: 'About' },
-  { page: 'soch', label: 'SOCH' },
-  { page: 'iiro', label: 'IIRO' },
-  { page: 'contact', label: 'Contact' },
+  { path: '/', label: 'Home' },
+  { path: '/articles', label: 'Articles' },
+  { path: '/portfolio', label: 'Portfolio' },
+  { path: '/media', label: 'Media' },
+  { path: '/events', label: 'Events' },
+  { path: '/publications', label: 'Publications' },
+  { path: '/about', label: 'About' },
+  { path: '/contact', label: 'Contact' },
 ];
+
+const MotionLink = motion(Link);
+
+function isActivePath(pathname, itemPath) {
+  if (itemPath === '/') return pathname === '/';
+  if (itemPath === '/articles') return pathname.startsWith('/articles') || pathname.startsWith('/blog');
+  return pathname === itemPath || pathname.startsWith(`${itemPath}/`);
+}
 
 function MagneticLink({ item, active, onNavigate }) {
   const x = useSpring(useMotionValue(0), { stiffness: 300, damping: 20 });
@@ -32,32 +41,25 @@ function MagneticLink({ item, active, onNavigate }) {
   };
 
   return (
-    <motion.a
-      href="#"
+    <MotionLink
+      to={item.path}
       style={{ x, y }}
       onMouseMove={handleMouseMove}
       onMouseLeave={reset}
-      onClick={(event) => {
-        event.preventDefault();
-        onNavigate(item.page);
-      }}
+      onClick={onNavigate}
       className={active ? 'nav-link active magnetic' : 'nav-link magnetic'}
     >
       {item.label}
-    </motion.a>
+    </MotionLink>
   );
 }
 
-export function Nav({ page, go }) {
+export function Nav() {
   const scrolled = useScrolled(20);
   const [mobileOpen, setMobileOpen] = useState(false);
   const navRef = useRef(null);
-  const activePage = page === 'article' ? 'blogs' : page;
-
-  const navigate = (nextPage) => {
-    setMobileOpen(false);
-    go(nextPage);
-  };
+  const location = useLocation();
+  const closeMenu = () => setMobileOpen(false);
 
   useEffect(() => {
     if (!mobileOpen) return undefined;
@@ -83,15 +85,15 @@ export function Nav({ page, go }) {
   return (
     <nav id="nav" className={scrolled ? 'nav-root scrolled' : 'nav-root'} ref={navRef}>
       <div className="nav-inner">
-        <button className="nav-brand" onClick={() => navigate('home')} aria-label="Go to home">
+        <Link className="nav-brand" to="/" onClick={closeMenu} aria-label="Go to home">
           <span className="nav-brand-en">{PERSON.nameEn}</span>
           <span className="nav-brand-hi">{PERSON.nameHi}</span>
-        </button>
+        </Link>
 
         <ul className="nav-links">
           {LINKS.map((item) => (
-            <li key={item.page}>
-              <MagneticLink item={item} active={activePage === item.page} onNavigate={navigate} />
+            <li key={item.path}>
+              <MagneticLink item={item} active={isActivePath(location.pathname, item.path)} onNavigate={closeMenu} />
             </li>
           ))}
         </ul>
@@ -133,13 +135,14 @@ export function Nav({ page, go }) {
             transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
           >
             {LINKS.map((item) => (
-              <button
-                key={item.page}
-                className={activePage === item.page ? 'mobile-menu-link active' : 'mobile-menu-link'}
-                onClick={() => navigate(item.page)}
+              <Link
+                key={item.path}
+                to={item.path}
+                className={isActivePath(location.pathname, item.path) ? 'mobile-menu-link active' : 'mobile-menu-link'}
+                onClick={closeMenu}
               >
                 {item.label}
-              </button>
+              </Link>
             ))}
           </motion.div>
         ) : null}

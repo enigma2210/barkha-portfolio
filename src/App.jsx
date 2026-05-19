@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Footer } from './components/layout/Footer';
 import { Nav } from './components/layout/Nav';
 import { PageTransition } from './components/layout/PageTransition';
+import { SEO } from './components/seo/SEO';
 import { Toast } from './components/ui/Toast';
 import { useCursorGlow } from './hooks/useCursorGlow';
 import { About } from './pages/About';
@@ -9,10 +11,12 @@ import { Admin } from './pages/Admin';
 import { Article } from './pages/Article';
 import { Blogs } from './pages/Blogs';
 import { Contact } from './pages/Contact';
+import { Events } from './pages/Events';
 import { Gallery } from './pages/Gallery';
 import { Home } from './pages/Home';
 import { IIRO } from './pages/IIRO';
 import { Portfolio } from './pages/Portfolio';
+import { Publications } from './pages/Publications';
 import { SOCH } from './pages/SOCH';
 
 function resetScrollPosition() {
@@ -33,15 +37,8 @@ function resetScrollPosition() {
   window.setTimeout(reset, 280);
 }
 
-export function App() {
-  const [page, setPage] = useState('home');
-  const [prevPage, setPrevPage] = useState('home');
-  const [articleId, setArticleId] = useState(null);
-  const [toast, setToast] = useState(null);
-  const glowRef = useRef(null);
-  const toastTimer = useRef(null);
-
-  useCursorGlow(glowRef);
+function useRouteScrollReset() {
+  const location = useLocation();
 
   useEffect(() => {
     if ('scrollRestoration' in window.history) {
@@ -50,62 +47,77 @@ export function App() {
   }, []);
 
   useLayoutEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     resetScrollPosition();
-  }, [page, articleId]);
+  }, [location.pathname]);
+}
 
-  function showToast(message) {
-    window.clearTimeout(toastTimer.current);
-    setToast({ id: Date.now(), message });
-    toastTimer.current = window.setTimeout(() => setToast(null), 4000);
-  }
+function LegacyArticleRedirect() {
+  const { slug } = useParams();
+  return <Navigate to={`/articles/${slug}`} replace />;
+}
 
-  function go(newPage, options = {}) {
-    resetScrollPosition();
-    setPrevPage(page);
-    if (options.articleId) {
-      setArticleId(options.articleId);
-    } else if (newPage !== 'article') {
-      setArticleId(null);
-    }
-    setPage(newPage);
-    resetScrollPosition();
-  }
+function AdminRoute({ showToast }) {
+  const navigate = useNavigate();
 
-  function openArticle(id) {
-    go('article', { articleId: id });
-  }
+  const go = (target) => {
+    const pathMap = {
+      home: '/',
+      articles: '/articles',
+      blogs: '/articles',
+      portfolio: '/portfolio',
+      media: '/media',
+      gallery: '/media',
+      events: '/events',
+      publications: '/publications',
+      about: '/about',
+      contact: '/contact',
+      soch: '/soch',
+      iiro: '/iiro',
+    };
 
-  function renderPage() {
-    switch (page) {
-      case 'blogs':
-        return <Blogs openArticle={openArticle} />;
-      case 'article':
-        return <Article articleId={articleId} onBack={() => go(prevPage || 'blogs')} showToast={showToast} />;
-      case 'portfolio':
-        return <Portfolio />;
-      case 'gallery':
-        return <Gallery />;
-      case 'soch':
-        return <SOCH />;
-      case 'iiro':
-        return <IIRO />;
-      case 'about':
-        return <About go={go} />;
-      case 'contact':
-        return <Contact showToast={showToast} />;
-      case 'admin':
-        return <Admin showToast={showToast} go={go} />;
-      case 'home':
-      default:
-        return <Home go={go} openArticle={openArticle} />;
-    }
-  }
+    navigate(pathMap[target] || '/');
+  };
 
-  if (page === 'admin') {
+  return <Admin showToast={showToast} go={go} />;
+}
+
+function PublicRoutes({ showToast }) {
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/about" element={<About />} />
+      <Route path="/portfolio" element={<Portfolio />} />
+      <Route path="/articles" element={<Blogs />} />
+      <Route path="/articles/:slug" element={<Article showToast={showToast} />} />
+      <Route path="/contact" element={<Contact showToast={showToast} />} />
+      <Route path="/media" element={<Gallery />} />
+      <Route path="/events" element={<Events />} />
+      <Route path="/publications" element={<Publications />} />
+      <Route path="/soch" element={<SOCH />} />
+      <Route path="/iiro" element={<IIRO />} />
+      <Route path="/gallery" element={<Navigate to="/media" replace />} />
+      <Route path="/blogs" element={<Navigate to="/articles" replace />} />
+      <Route path="/blog/:slug" element={<LegacyArticleRedirect />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function AppShell({ showToast, toast }) {
+  const location = useLocation();
+  const glowRef = useRef(null);
+  const isAdminRoute = location.pathname.startsWith('/admin');
+
+  useCursorGlow(glowRef);
+  useRouteScrollReset();
+
+  if (isAdminRoute) {
     return (
       <>
-        <Admin showToast={showToast} go={go} />
+        <Routes>
+          <Route path="/admin" element={<AdminRoute showToast={showToast} />} />
+          <Route path="*" element={<Navigate to="/admin" replace />} />
+        </Routes>
         <Toast toast={toast} />
       </>
     );
@@ -113,15 +125,29 @@ export function App() {
 
   return (
     <>
-      <Nav page={page} go={go} />
+      <SEO />
+      <Nav />
       <div id="cursor-glow" ref={glowRef} />
       <div id="scroll-root">
-        <PageTransition pageKey={`${page}-${articleId || 'none'}`}>
-          {renderPage()}
+        <PageTransition pageKey={location.pathname}>
+          <PublicRoutes showToast={showToast} />
         </PageTransition>
-        <Footer go={go} />
+        <Footer />
       </div>
       <Toast toast={toast} />
     </>
   );
+}
+
+export function App() {
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+
+  function showToast(message) {
+    window.clearTimeout(toastTimer.current);
+    setToast({ id: Date.now(), message });
+    toastTimer.current = window.setTimeout(() => setToast(null), 4000);
+  }
+
+  return <AppShell showToast={showToast} toast={toast} />;
 }

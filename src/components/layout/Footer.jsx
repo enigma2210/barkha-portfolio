@@ -1,12 +1,15 @@
+import { Link } from 'react-router-dom';
 import { ORGS, PERSON } from '../../data/siteData';
 
 const FOOTER_NAV = [
-  ['Home', 'home'],
-  ['Blogs', 'blogs'],
-  ['Portfolio', 'portfolio'],
-  ['Gallery', 'gallery'],
-  ['About', 'about'],
-  ['Admin', 'admin'],
+  ['Home', '/'],
+  ['Articles', '/articles'],
+  ['Portfolio', '/portfolio'],
+  ['Media', '/media'],
+  ['Events', '/events'],
+  ['Publications', '/publications'],
+  ['About', '/about'],
+  ['Admin', '/admin'],
 ];
 
 const FOOTER_CONTACT = [
@@ -16,7 +19,7 @@ const FOOTER_CONTACT = [
   ['LinkedIn', PERSON.linkedin],
 ];
 
-export function Footer({ go }) {
+export function Footer() {
   return (
     <footer className="footer">
       <div className="footer-inner">
@@ -30,10 +33,10 @@ export function Footer({ go }) {
 
         <div className="footer-links-col">
           <h4>Navigation</h4>
-          {FOOTER_NAV.map(([label, target]) => (
-            <button key={target} type="button" onClick={() => go(target)}>
+          {FOOTER_NAV.map(([label, path]) => (
+            <Link key={path} to={path}>
               {label}
-            </button>
+            </Link>
           ))}
         </div>
 

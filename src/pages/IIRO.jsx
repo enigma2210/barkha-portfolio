@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { SEO } from '../components/seo/SEO';
 import { AmbientOrb } from '../components/ui/AmbientOrb';
 import { Eyebrow } from '../components/ui/Eyebrow';
 import { SplitText } from '../components/ui/SplitText';
@@ -26,6 +27,11 @@ const THEMES = [
 export function IIRO() {
   return (
     <div className="org-page org-page-iiro">
+      <SEO
+        title="IIRO"
+        description="IIRO is a research and policy think tank focused on Internet governance, cybersecurity, privacy, digital rights, and inclusion in India."
+        path="/iiro"
+      />
       <AmbientOrb tone="mint" />
       <section className="org-hero org-hero-iiro">
         <div className="soch-hero-top iiro-hero-top org-hero-top">

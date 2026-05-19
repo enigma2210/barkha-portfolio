@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { ARTS } from '../../data/articles';
 import { sanitizeHtml } from '../../utils/sanitizeHtml';
+import { toSlug } from '../../utils/urlRouter';
 
 const STORAGE_KEY = 'barkha_user_articles_v1';
 
@@ -70,12 +72,7 @@ const labelStyle = {
 };
 
 function slugify(value) {
-  return String(value || '')
-    .toLowerCase()
-    .trim()
-    .replace(/['"]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  return toSlug(value);
 }
 
 function stripHtml(html) {
@@ -117,7 +114,13 @@ function uniqueSlug(base, articles, previousId) {
   const cleanBase = slugify(base) || fallback;
   let candidate = cleanBase;
   let suffix = 2;
-  const taken = new Set(articles.filter((article) => article.id !== previousId).map((article) => article.id));
+  const staticSlugs = Object.entries(ARTS).flatMap(([key, article]) => [key, toSlug(article.title)]);
+  const taken = new Set([
+    ...staticSlugs,
+    ...articles
+      .filter((article) => article.id !== previousId && article.slug !== previousId)
+      .flatMap((article) => [article.id, article.slug].filter(Boolean)),
+  ]);
 
   while (taken.has(candidate)) {
     candidate = `${cleanBase}-${suffix}`;
@@ -132,6 +135,8 @@ export function ArticleEditor({ showToast }) {
   const [articles, setArticles] = useState(getUserArticles);
   const [current, setCurrent] = useState(null);
   const [coverPreview, setCoverPreview] = useState(null);
+  const [lastPublishedUrl, setLastPublishedUrl] = useState('');
+  const [copiedUrl, setCopiedUrl] = useState(false);
   const editorRef = useRef(null);
   const coverInputRef = useRef(null);
 
@@ -214,23 +219,40 @@ export function ArticleEditor({ showToast }) {
     const all = getUserArticles();
     const previousId = current.id;
     const body = sanitizeHtml(editorRef.current?.innerHTML || current.body || '<p><br></p>');
-    const id = uniqueSlug(current.title || previousId, all, previousId);
+    const slug = uniqueSlug(current.slug || current.title || previousId, all, previousId);
     const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const updated = {
       ...current,
-      id,
+      id: slug,
+      slug,
       body,
       status,
       date: current.date || today,
       excerpt: current.excerpt || excerptFromBody(body),
       createdAt: current.createdAt || Date.now(),
     };
-    const next = [updated, ...all.filter((article) => article.id !== previousId && article.id !== id)];
+    const next = [updated, ...all.filter((article) => article.id !== previousId && article.id !== slug && article.slug !== slug)];
     saveUserArticles(next);
     setArticles(next);
     setCurrent(updated);
     showToast?.(status === 'published' ? '✓ Article published!' : '✓ Draft saved.');
-    if (status === 'published') setMode('list');
+    if (status === 'published') {
+      setLastPublishedUrl(`${window.location.origin}/articles/${slug}`);
+      setCopiedUrl(false);
+      setMode('list');
+    }
+  }
+
+  async function copyPublishedUrl() {
+    if (!lastPublishedUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(lastPublishedUrl);
+      setCopiedUrl(true);
+      window.setTimeout(() => setCopiedUrl(false), 2000);
+    } catch {
+      window.prompt('Copy article URL:', lastPublishedUrl);
+    }
   }
 
   function deleteArticle(id) {
@@ -272,6 +294,52 @@ export function ArticleEditor({ showToast }) {
             + New Article
           </button>
         </div>
+
+        {lastPublishedUrl ? (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            flexWrap: 'wrap',
+            padding: '1rem 1.2rem',
+            marginBottom: '1.4rem',
+            background: 'rgba(20,184,166,0.08)',
+            border: '1px solid rgba(20,184,166,0.22)',
+            borderRadius: 'var(--r-md)',
+          }}>
+            <div style={{ minWidth: 0 }}>
+              <strong style={{ display: 'block', color: 'var(--teal-600)', fontSize: '0.86rem' }}>
+                Published article URL
+              </strong>
+              <a
+                href={lastPublishedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: 'block', color: 'var(--text-body)', fontSize: '0.82rem', overflowWrap: 'anywhere' }}
+              >
+                {lastPublishedUrl}
+              </a>
+            </div>
+            <button
+              type="button"
+              onClick={copyPublishedUrl}
+              style={{
+                flexShrink: 0,
+                background: copiedUrl ? 'var(--teal-600)' : 'white',
+                color: copiedUrl ? 'white' : 'var(--teal-600)',
+                border: '1px solid rgba(20,184,166,0.28)',
+                borderRadius: 'var(--r-full)',
+                padding: '0.5rem 1rem',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {copiedUrl ? 'Copied!' : 'Copy link'}
+            </button>
+          </div>
+        ) : null}
 
         {articles.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)' }}>

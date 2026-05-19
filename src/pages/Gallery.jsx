@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { GalleryFolders } from '../components/gallery/GalleryFolders';
 import { GalleryMasonry } from '../components/gallery/GalleryMasonry';
 import { Lightbox } from '../components/gallery/Lightbox';
+import { SEO } from '../components/seo/SEO';
 import { Eyebrow } from '../components/ui/Eyebrow';
 import { SplitText } from '../components/ui/SplitText';
 import { getFolderImages } from '../data/gallery';
@@ -73,6 +74,11 @@ export function Gallery() {
 
   return (
     <>
+      <SEO
+        title="Media"
+        description="Photo gallery and media archive from Barkha Manral's Internet governance forums, community workshops, and global engagements."
+        path="/media"
+      />
       <div className="page-hero">
         <div className="page-hero-inner">
           <Eyebrow className="u-justify-center">Visual Chronicle</Eyebrow>

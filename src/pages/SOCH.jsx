@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { SEO } from '../components/seo/SEO';
 import { AmbientOrb } from '../components/ui/AmbientOrb';
 import { Eyebrow } from '../components/ui/Eyebrow';
 import { SplitText } from '../components/ui/SplitText';
@@ -24,6 +25,11 @@ const FOCUS_AREAS = [
 export function SOCH() {
   return (
     <div className="org-page org-page-soch">
+      <SEO
+        title="SOCH"
+        description="SOCH is a community-focused organization supporting social welfare, empowerment, and local development initiatives."
+        path="/soch"
+      />
       <AmbientOrb tone="mint" />
       <section className="org-hero org-hero-soch">
         <div className="soch-hero-top org-hero-top">

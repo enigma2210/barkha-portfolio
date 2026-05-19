@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { SEO } from '../components/seo/SEO';
 import { Eyebrow } from '../components/ui/Eyebrow';
 import { SplitText } from '../components/ui/SplitText';
 import {
@@ -91,6 +92,11 @@ export function Portfolio() {
 
   return (
     <>
+      <SEO
+        title="Portfolio"
+        description="Barkha Manral's portfolio across Internet governance fellowships, policy research, technical writing, speaking, and community work."
+        path="/portfolio"
+      />
       <div className="page-hero">
         <div className="page-hero-inner">
           <Eyebrow className="u-justify-center">Professional Record</Eyebrow>

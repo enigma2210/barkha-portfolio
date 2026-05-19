@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getArticleById } from '../data/articleStore';
+import { Check, Link2, Linkedin, MessageCircle } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { SEO } from '../components/seo/SEO';
+import {
+  getArticleById,
+  getArticleBySlug,
+  getArticlePath,
+  getRelatedArticles,
+} from '../data/articleStore';
 import { addComment, getComments } from '../data/comments';
 import { AuthorAvatar } from '../components/ui/AuthorAvatar';
 import { ReadingProgress } from '../components/ui/ReadingProgress';
@@ -46,6 +54,146 @@ function CommenterAvatar({ name, size = 38 }) {
     >
       {initial}
     </div>
+  );
+}
+
+function copyTextFallback(text) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.top = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    document.execCommand('copy');
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
+function getCurrentArticleUrl(article) {
+  return `${window.location.origin}${getArticlePath(article)}`;
+}
+
+function CopyLinkButton({ article }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    const url = getCurrentArticleUrl(article);
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        copyTextFallback(url);
+      }
+
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      copyTextFallback(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title="Copy article link"
+      aria-label="Copy link to this article"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '0.4rem',
+        fontSize: '0.78rem',
+        fontWeight: 600,
+        color: copied ? 'var(--teal-600)' : 'var(--text-muted)',
+        background: copied ? 'rgba(20,184,166,0.08)' : 'var(--bg-sky-light)',
+        border: `1px solid ${copied ? 'rgba(20,184,166,0.25)' : 'var(--border)'}`,
+        borderRadius: 'var(--r-full)',
+        padding: '0.35rem 0.9rem',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        flexShrink: 0,
+      }}
+    >
+      {copied ? <Check size={14} aria-hidden="true" /> : <Link2 size={14} aria-hidden="true" />}
+      {copied ? 'Copied!' : 'Copy link'}
+    </button>
+  );
+}
+
+function ShareActions({ article }) {
+  const url = getCurrentArticleUrl(article);
+  const encodedUrl = encodeURIComponent(url);
+  const encodedTitle = encodeURIComponent(article.title);
+  const shareLinks = [
+    ['Twitter/X', `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedTitle}`, null],
+    ['LinkedIn', `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`, <Linkedin size={14} aria-hidden="true" />],
+    ['WhatsApp', `https://wa.me/?text=${encodedTitle}%20${encodedUrl}`, <MessageCircle size={14} aria-hidden="true" />],
+  ];
+
+  const linkStyle = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.4rem',
+    fontSize: '0.78rem',
+    fontWeight: 600,
+    color: 'var(--text-muted)',
+    background: 'var(--bg-sky-light)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--r-full)',
+    padding: '0.35rem 0.9rem',
+    transition: 'all 0.2s',
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+      <CopyLinkButton article={article} />
+      {shareLinks.map(([label, href, icon]) => (
+        <a key={label} href={href} target="_blank" rel="noopener noreferrer" style={linkStyle}>
+          {icon}
+          {label}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function RelatedArticles({ article }) {
+  const related = useMemo(() => getRelatedArticles(article, 3), [article]);
+
+  if (!related.length) return null;
+
+  return (
+    <section className="section" style={{ paddingTop: '1rem' }}>
+      <div className="container">
+        <div className="section-eyebrow">Keep Reading</div>
+        <h2 className="comments-heading section-h2">Related Articles</h2>
+        <div className="blogs-grid">
+          {related.map((item) => (
+            <article className="blog-card" key={item.slug || item.id}>
+              <Link className="blog-card-button" to={getArticlePath(item)}>
+                <div className="blog-card-stripe" />
+                <div className="blog-card-body">
+                  <span className="blog-cat">{item.cat}</span>
+                  <h3 className="blog-title">{item.title}</h3>
+                  <p className="blog-excerpt">{item.excerpt}</p>
+                </div>
+                <div className="blog-footer">
+                  <span className="blog-date">{item.date}</span>
+                  <span className="blog-read-link read-link">Read {'\u2192'}</span>
+                </div>
+              </Link>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -226,32 +374,16 @@ function CommentForm({ articleId, onSubmitted, showToast }) {
 }
 
 export function Article({ articleId, onBack, showToast }) {
-  const article = getArticleById(articleId);
+  const { slug } = useParams();
+  const navigate = useNavigate();
+  const article = slug ? getArticleBySlug(slug) : getArticleById(articleId);
   const articleBodyRef = useRef(null);
   const [profile, setProfile] = useState(() => getProfile());
   const [comments, setComments] = useState([]);
 
   useEffect(() => {
+    if (!article) return;
     setComments(getComments());
-  }, [articleId]);
-
-  useEffect(() => {
-    const previousTitle = document.title;
-    const metaTitle = article.seo?.metaTitle || article.title;
-    const metaDescription = article.seo?.metaDescription || article.excerpt || '';
-    document.title = `${metaTitle} | Barkha Manral`;
-
-    let description = document.querySelector('meta[name="description"]');
-    if (!description) {
-      description = document.createElement('meta');
-      description.setAttribute('name', 'description');
-      document.head.appendChild(description);
-    }
-    description.setAttribute('content', metaDescription);
-
-    return () => {
-      document.title = previousTitle;
-    };
   }, [article]);
 
   useEffect(() => {
@@ -269,33 +401,80 @@ export function Article({ articleId, onBack, showToast }) {
   }, []);
 
   const approved = useMemo(
-    () => comments.filter((comment) => comment.articleId === article.id && comment.status === 'approved'),
-    [article.id, comments],
+    () => comments.filter((comment) => comment.articleId === article?.id && comment.status === 'approved'),
+    [article?.id, comments],
   );
+
+  if (!article) {
+    return (
+      <>
+        <SEO
+          title="Article Not Found"
+          description="The article you are looking for could not be found."
+          path={slug ? `/articles/${slug}` : '/articles'}
+        />
+        <div className="page-hero">
+          <div className="page-hero-inner">
+            <div className="section-eyebrow">Article</div>
+            <h1 className="heading-xl">Article not found</h1>
+            <p className="subtext u-subtext-center">This article may have moved, been unpublished, or the link may be incorrect.</p>
+            <Link className="btn btn-primary" to="/articles">Back to Articles</Link>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const metaTitle = article.seo?.metaTitle || article.title;
+  const metaDescription = article.seo?.metaDescription || article.excerpt || '';
+  const articleImage = article.seo?.openGraphImage || article.coverImage || article.featuredImage || '';
+  const tags = [...new Set([article.cat, ...(article.tags || [])].filter(Boolean))];
+  const handleBack = onBack || (() => navigate('/articles'));
 
   return (
     <div className="article-page-wrap">
+      <SEO
+        title={metaTitle}
+        description={metaDescription}
+        path={article.seo?.canonicalUrl || getArticlePath(article)}
+        image={articleImage}
+        type="article"
+        article={{
+          publishedTime: article.publishDate,
+          modifiedTime: article.updatedAt,
+          author: article.authorName || PERSON.nameEn,
+          section: article.cat,
+          tags,
+        }}
+      />
       <ReadingProgress articleRef={articleBodyRef} />
 
       <header className="article-hero">
         <div className="article-inner">
-          <button className="back-btn" type="button" onClick={onBack}>
-            {'\u2190'} Back to Archive
+          <button className="back-btn" type="button" onClick={handleBack}>
+            {'\u2190'} Back to Articles
           </button>
           <div className="art-cat">{article.cat}</div>
           <h1 className="art-title">{article.title}</h1>
           {article.subtitle ? <p className="art-subtitle">{article.subtitle}</p> : null}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '1.2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.2rem' }}>
             <AuthorAvatar size={42} />
-            <div>
+            <div style={{ marginRight: 'auto' }}>
               <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 600, color: 'var(--sky-800)' }}>
-                {PERSON.nameEn}
+                {article.authorName || PERSON.nameEn}
               </p>
               <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--text-muted)' }}>
                 {profile.title || PERSON.profileTitle} {'\u00B7'} {article.date}
+                {article.readingTime ? ` \u00B7 ${article.readingTime} min read` : ''}
               </p>
             </div>
+            <ShareActions article={article} />
           </div>
+          {tags.length ? (
+            <div className="tag-row" style={{ marginTop: '1.25rem' }}>
+              {tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}
+            </div>
+          ) : null}
           {article.coverImage || article.featuredImage ? (
             <img
               src={article.coverImage || article.featuredImage}
@@ -316,6 +495,8 @@ export function Article({ articleId, onBack, showToast }) {
       <div className="art-body-wrap" ref={articleBodyRef}>
         <article className="art-body" dangerouslySetInnerHTML={{ __html: article.body }} />
       </div>
+
+      <RelatedArticles article={article} />
 
       <section className="comments-wrap">
         <div className="section-eyebrow">Discussion</div>

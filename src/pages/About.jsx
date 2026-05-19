@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+import { SEO } from '../components/seo/SEO';
 import { AmbientOrb } from '../components/ui/AmbientOrb';
 import { CounterNumber } from '../components/ui/CounterNumber';
 import { Eyebrow } from '../components/ui/Eyebrow';
@@ -5,9 +7,14 @@ import { FadeIn } from '../components/ui/FadeIn';
 import { SplitText } from '../components/ui/SplitText';
 import { ICANN85_EVENT, PERSON, STATS as SITE_STATS } from '../data/siteData';
 
-export function About({ go }) {
+export function About() {
   return (
     <div className="about-page">
+      <SEO
+        title="About"
+        description="Learn about Barkha Manral's work in Internet governance, digital rights, policy research, and community building."
+        path="/about"
+      />
       <AmbientOrb tone="sky" />
       <div className="page-hero">
         <div className="page-hero-inner">
@@ -69,9 +76,9 @@ export function About({ go }) {
                   <span className="tag" key={tag}>{tag}</span>
                 ))}
               </div>
-              <button className="btn btn-primary" type="button" onClick={() => go('contact')}>
+              <Link className="btn btn-primary" to="/contact">
                 Start a Conversation
-              </button>
+              </Link>
             </FadeIn>
           </div>
         </div>

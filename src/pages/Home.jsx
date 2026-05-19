@@ -1,21 +1,13 @@
 import { motion, useInView, useScroll, useTransform } from 'framer-motion';
 import { useMemo, useRef } from 'react';
-import { getPublishedArticles } from '../data/articleStore';
+import { Link } from 'react-router-dom';
+import { SEO } from '../components/seo/SEO';
+import { getArticlePath, getPublishedArticles } from '../data/articleStore';
 import { AFFILIATIONS } from '../data/affiliations';
-import { ARTS } from '../data/articles';
 import { HERO_BIO, PERSON, STATS as SITE_STATS } from '../data/siteData';
 import { CounterNumber } from '../components/ui/CounterNumber';
 import { Eyebrow } from '../components/ui/Eyebrow';
 import { FadeIn } from '../components/ui/FadeIn';
-
-const LIVE_EXCERPTS = [
-  { id: 'nist', comments: '1 Comment' },
-  { id: 'ai-summit', comments: 'No Comments' },
-  { id: 'backbone', comments: 'No Comments' },
-  { id: 'igf', comments: 'No Comments' },
-  { id: 'influencers', comments: 'No Comments' },
-  { id: 'pit', comments: 'No Comments' },
-];
 
 const CONTACT_LINKS = [
   { label: 'LinkedIn', href: PERSON.linkedin },
@@ -142,14 +134,12 @@ function HeroSection() {
   );
 }
 
-function SomeExcerpts({ openArticle }) {
+function SomeExcerpts() {
   const articles = useMemo(() => {
-    const published = getPublishedArticles().slice(0, 6).map((article) => ({
+    return getPublishedArticles().slice(0, 6).map((article) => ({
       ...article,
       comments: article.readingTime ? `${article.readingTime} min read` : 'New Article',
     }));
-    const existing = LIVE_EXCERPTS.map((item) => ({ ...ARTS[item.id], ...item }));
-    return [...published, ...existing].slice(0, 6);
   }, []);
 
   return (
@@ -162,7 +152,7 @@ function SomeExcerpts({ openArticle }) {
         <div className="blogs-grid home-live-excerpt-grid">
           {articles.map((article, index) => (
               <FadeIn className="blog-card home-live-excerpt-card" delay={index * 0.08} key={article.id}>
-                <button type="button" className="blog-card-button" onClick={() => openArticle(article.slug || article.id)}>
+                <Link className="blog-card-button" to={getArticlePath(article)}>
                   <div className="blog-card-stripe" />
                   <div className="blog-card-body">
                     <span className="blog-cat">{article.cat}</span>
@@ -173,7 +163,7 @@ function SomeExcerpts({ openArticle }) {
                     <span className="blog-date">{article.date}</span>
                     <span className="blog-read-link">Read More</span>
                   </div>
-                </button>
+                </Link>
               </FadeIn>
           ))}
         </div>
@@ -182,7 +172,7 @@ function SomeExcerpts({ openArticle }) {
   );
 }
 
-function AboutMeSection({ go }) {
+function AboutMeSection() {
   return (
     <section className="about-section home-about-section">
       <div className="container">
@@ -223,9 +213,9 @@ function AboutMeSection({ go }) {
                 <span className="tag" key={tag}>{tag}</span>
               ))}
             </div>
-            <button className="btn btn-primary" type="button" onClick={() => go('about')}>
+            <Link className="btn btn-primary" to="/about">
               Read More
-            </button>
+            </Link>
           </FadeIn>
         </div>
       </div>
@@ -286,13 +276,18 @@ function ReachOut() {
   );
 }
 
-export function Home({ go, openArticle }) {
+export function Home() {
   return (
     <>
+      <SEO
+        title="Barkha Manral"
+        description="Barkha Manral works across Internet governance, cybersecurity, AI policy, digital rights, and community-centered public-interest technology."
+        path="/"
+      />
       <HeroSection />
-      <AboutMeSection go={go} />
+      <AboutMeSection />
       <AffiliationsSection />
-      <SomeExcerpts openArticle={openArticle} />
+      <SomeExcerpts />
       <ReachOut />
     </>
   );
