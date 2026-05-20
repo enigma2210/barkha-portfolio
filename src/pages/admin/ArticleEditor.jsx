@@ -33,16 +33,39 @@ const EMPTY_ARTICLE = {
 };
 
 const TOOLBAR = [
+  { cmd: 'undo', icon: 'Undo', title: 'Undo' },
+  { cmd: 'redo', icon: 'Redo', title: 'Redo' },
+  { sep: true },
   { cmd: 'bold', icon: 'B', title: 'Bold' },
   { cmd: 'italic', icon: 'I', title: 'Italic' },
   { cmd: 'underline', icon: 'U', title: 'Underline' },
+  { cmd: 'strikeThrough', icon: 'S', title: 'Strikethrough' },
+  { action: 'inlineCode', icon: 'Code', title: 'Inline code' },
+  { cmd: 'removeFormat', icon: 'Clear', title: 'Clear formatting' },
   { sep: true },
+  { cmd: 'formatBlock', arg: 'h1', icon: 'H1', title: 'Heading 1' },
   { cmd: 'formatBlock', arg: 'h2', icon: 'H2', title: 'Heading 2' },
   { cmd: 'formatBlock', arg: 'h3', icon: 'H3', title: 'Heading 3' },
+  { cmd: 'formatBlock', arg: 'h4', icon: 'H4', title: 'Heading 4' },
   { cmd: 'formatBlock', arg: 'p', icon: 'P', title: 'Paragraph' },
+  { cmd: 'formatBlock', arg: 'blockquote', icon: 'Quote', title: 'Blockquote' },
   { sep: true },
   { cmd: 'insertUnorderedList', icon: 'List', title: 'Bullet List' },
   { cmd: 'insertOrderedList', icon: '1.', title: 'Numbered List' },
+  { action: 'hr', icon: 'HR', title: 'Divider' },
+  { sep: true },
+  { action: 'link', icon: 'Link', title: 'Add or edit link (Ctrl+K)' },
+  { action: 'unlink', icon: 'Unlink', title: 'Remove link' },
+  { action: 'image', icon: 'Image', title: 'Insert image' },
+  { action: 'imageUrl', icon: 'Img URL', title: 'Insert image from URL' },
+  { action: 'embed', icon: 'Embed', title: 'Embed YouTube or Vimeo' },
+];
+
+const CALLOUT_TYPES = [
+  { type: 'note', label: 'Note', heading: 'Note' },
+  { type: 'warning', label: 'Warning', heading: 'Warning' },
+  { type: 'insight', label: 'Insight', heading: 'Insight' },
+  { type: 'highlight', label: 'Highlight', heading: 'Highlight' },
 ];
 
 const inputStyle = {
@@ -86,6 +109,141 @@ function excerptFromBody(html) {
   return text.length > 160 ? `${text.slice(0, 160).trim()}...` : text;
 }
 
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeAttr(value = '') {
+  return escapeHtml(value).replace(/`/g, '&#96;');
+}
+
+function textToParagraphHtml(text = '') {
+  return String(text)
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+}
+
+function cleanPastedHtml(html = '') {
+  const safeHtml = sanitizeHtml(html);
+  if (typeof window === 'undefined' || !window.DOMParser) return safeHtml;
+
+  const doc = new window.DOMParser().parseFromString(safeHtml, 'text/html');
+  doc.body.querySelectorAll('*').forEach((node) => {
+    node.removeAttribute('style');
+    if (node.tagName === 'SPAN' && !node.attributes.length) {
+      node.replaceWith(...Array.from(node.childNodes));
+    }
+  });
+  return doc.body.innerHTML;
+}
+
+function normalizeEditorLinkUrl(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return { error: 'Enter a link URL.' };
+
+  if (raw.startsWith('/') || raw.startsWith('#')) return { url: raw };
+  if (/^(mailto:|tel:)/i.test(raw)) return { url: raw };
+
+  const withProtocol = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`;
+  if (!/^https:\/\//i.test(withProtocol)) {
+    return { error: 'External links must use HTTPS.' };
+  }
+
+  try {
+    const parsed = new URL(withProtocol);
+    if (parsed.protocol !== 'https:') return { error: 'External links must use HTTPS.' };
+    return { url: parsed.href };
+  } catch {
+    return { error: 'Enter a valid HTTPS, internal, mailto, or tel link.' };
+  }
+}
+
+function isExternalEditorLink(url = '') {
+  if (!/^https:\/\//i.test(url)) return false;
+  if (typeof window === 'undefined') return true;
+
+  try {
+    return new URL(url).origin !== window.location.origin;
+  } catch {
+    return true;
+  }
+}
+
+function applyLinkAttributes(anchor, href) {
+  anchor.setAttribute('href', href);
+  if (isExternalEditorLink(href)) {
+    anchor.setAttribute('target', '_blank');
+    anchor.setAttribute('rel', 'noopener noreferrer');
+  } else {
+    anchor.removeAttribute('target');
+    anchor.setAttribute('rel', 'noopener');
+  }
+}
+
+function closestAnchor(node, root) {
+  let element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+  while (element && element !== root) {
+    if (element.tagName === 'A') return element;
+    element = element.parentElement;
+  }
+  return null;
+}
+
+function getSelectedAnchor(root) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount || !root) return null;
+
+  const range = selection.getRangeAt(0);
+  return closestAnchor(selection.anchorNode, root)
+    || closestAnchor(selection.focusNode, root)
+    || closestAnchor(range.commonAncestorContainer, root);
+}
+
+function normalizeEmbedUrl(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return { error: 'Paste a YouTube or Vimeo URL.' };
+
+  const withProtocol = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`;
+  if (!/^https:\/\//i.test(withProtocol)) return { error: 'Embeds must use HTTPS.' };
+
+  try {
+    const url = new URL(withProtocol);
+    const host = url.hostname.replace(/^www\./, '');
+
+    if (host === 'youtu.be') {
+      const id = url.pathname.split('/').filter(Boolean)[0];
+      if (id) return { url: `https://www.youtube.com/embed/${id}` };
+    }
+
+    if (host === 'youtube.com') {
+      if (url.pathname.startsWith('/embed/')) return { url: url.href };
+      const id = url.searchParams.get('v');
+      if (id) return { url: `https://www.youtube.com/embed/${id}` };
+    }
+
+    if (host === 'vimeo.com') {
+      const id = url.pathname.split('/').filter(Boolean)[0];
+      if (id) return { url: `https://player.vimeo.com/video/${id}` };
+    }
+
+    if (host === 'player.vimeo.com' && url.pathname.startsWith('/video/')) {
+      return { url: url.href };
+    }
+  } catch {
+    return { error: 'Enter a valid YouTube or Vimeo URL.' };
+  }
+
+  return { error: 'Only YouTube and Vimeo embeds are supported.' };
+}
+
 function normalizeForEditor(article) {
   return {
     ...EMPTY_ARTICLE,
@@ -111,8 +269,18 @@ export function ArticleEditor({ showToast }) {
   const [coverPreview, setCoverPreview] = useState(null);
   const [lastPublishedUrl, setLastPublishedUrl] = useState('');
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [linkModal, setLinkModal] = useState({
+    open: false,
+    url: '',
+    text: '',
+    isEditing: false,
+    error: '',
+  });
   const editorRef = useRef(null);
   const coverInputRef = useRef(null);
+  const bodyImageInputRef = useRef(null);
+  const savedSelectionRef = useRef(null);
+  const activeLinkRef = useRef(null);
 
   async function loadArticles() {
     setLoading(true);
@@ -137,9 +305,38 @@ export function ArticleEditor({ showToast }) {
     }
   }, [mode, current?.id]);
 
-  function syncEditorBody() {
+  function syncEditorBody(options = {}) {
     const body = sanitizeHtml(editorRef.current?.innerHTML || '<p><br></p>');
+    if (options.rewrite && editorRef.current && editorRef.current.innerHTML !== body) {
+      editorRef.current.innerHTML = body;
+    }
     setCurrent((article) => (article ? { ...article, body } : article));
+  }
+
+  function editorContainsRange(range) {
+    if (!editorRef.current || !range) return false;
+    const node = range.commonAncestorContainer;
+    return editorRef.current.contains(node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode);
+  }
+
+  function saveEditorSelection() {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return;
+
+    const range = selection.getRangeAt(0);
+    if (editorContainsRange(range)) {
+      savedSelectionRef.current = range.cloneRange();
+    }
+  }
+
+  function restoreEditorSelection() {
+    const range = savedSelectionRef.current;
+    if (!range || !editorContainsRange(range)) return false;
+
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
   }
 
   function createBlankArticle() {
@@ -154,6 +351,255 @@ export function ArticleEditor({ showToast }) {
     editorRef.current?.focus();
     document.execCommand('insertHTML', false, sanitizeHtml(html));
     syncEditorBody();
+  }
+
+  function wrapSelectionWithTag(tagName) {
+    editorRef.current?.focus();
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return;
+
+    const range = selection.getRangeAt(0);
+    if (!editorContainsRange(range) || range.collapsed) return;
+
+    const wrapper = document.createElement(tagName);
+    wrapper.appendChild(range.extractContents());
+    range.insertNode(wrapper);
+    range.setStartAfter(wrapper);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    syncEditorBody({ rewrite: true });
+  }
+
+  function openLinkModal() {
+    editorRef.current?.focus();
+    saveEditorSelection();
+
+    const anchor = getSelectedAnchor(editorRef.current);
+    activeLinkRef.current = anchor;
+
+    const selection = window.getSelection();
+    const selectedText = anchor?.textContent || (selection?.rangeCount ? selection.toString() : '');
+    setLinkModal({
+      open: true,
+      url: anchor?.getAttribute('href') || '',
+      text: selectedText || '',
+      isEditing: Boolean(anchor),
+      error: '',
+    });
+  }
+
+  function closeLinkModal() {
+    activeLinkRef.current = null;
+    setLinkModal({ open: false, url: '', text: '', isEditing: false, error: '' });
+  }
+
+  function applyLink(event) {
+    event.preventDefault();
+    const normalized = normalizeEditorLinkUrl(linkModal.url);
+    if (normalized.error) {
+      setLinkModal((modal) => ({ ...modal, error: normalized.error }));
+      return;
+    }
+
+    editorRef.current?.focus();
+    const text = linkModal.text.trim();
+    const existingAnchor = activeLinkRef.current;
+
+    if (existingAnchor && editorRef.current?.contains(existingAnchor)) {
+      applyLinkAttributes(existingAnchor, normalized.url);
+      if (text) existingAnchor.textContent = text;
+      syncEditorBody({ rewrite: true });
+      closeLinkModal();
+      return;
+    }
+
+    restoreEditorSelection();
+    const selection = window.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    const anchor = document.createElement('a');
+    applyLinkAttributes(anchor, normalized.url);
+
+    if (range && editorContainsRange(range) && !range.collapsed) {
+      anchor.appendChild(range.extractContents());
+      if (!anchor.textContent.trim() && text) anchor.textContent = text;
+      range.insertNode(anchor);
+      range.setStartAfter(anchor);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } else {
+      anchor.textContent = text || normalized.url;
+      if (range && editorContainsRange(range)) {
+        range.insertNode(anchor);
+        range.setStartAfter(anchor);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      } else {
+        editorRef.current?.appendChild(anchor);
+      }
+    }
+
+    syncEditorBody({ rewrite: true });
+    closeLinkModal();
+  }
+
+  function removeLinkFromEditor() {
+    editorRef.current?.focus();
+    const existingAnchor = activeLinkRef.current;
+
+    if (existingAnchor && editorRef.current?.contains(existingAnchor)) {
+      const parent = existingAnchor.parentNode;
+      while (existingAnchor.firstChild) parent.insertBefore(existingAnchor.firstChild, existingAnchor);
+      parent.removeChild(existingAnchor);
+    } else {
+      restoreEditorSelection();
+      document.execCommand('unlink');
+    }
+
+    syncEditorBody({ rewrite: true });
+    closeLinkModal();
+  }
+
+  function insertImageBlock(src, caption = '') {
+    insertHtmlAtSelection(`
+      <figure class="article-image">
+        <img src="${escapeAttr(src)}" alt="${escapeAttr(caption || 'Article image')}" />
+        <figcaption>${escapeHtml(caption || 'Image caption')}</figcaption>
+      </figure>
+      <p><br></p>
+    `);
+  }
+
+  function handleBodyImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    if (file.size > 8 * 1024 * 1024) {
+      window.alert('Image must be under 8MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const caption = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+      restoreEditorSelection();
+      insertImageBlock(event.target.result, caption);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function insertImageFromUrl() {
+    const raw = window.prompt('Paste an HTTPS image URL');
+    if (!raw) return;
+
+    const normalized = normalizeEditorLinkUrl(raw);
+    if (normalized.error || !/^https:\/\//i.test(normalized.url)) {
+      window.alert('Image URLs must be valid HTTPS links.');
+      return;
+    }
+
+    restoreEditorSelection();
+    insertImageBlock(normalized.url, 'Image caption');
+  }
+
+  function insertEmbed() {
+    const raw = window.prompt('Paste a YouTube or Vimeo URL');
+    if (!raw) return;
+
+    const normalized = normalizeEmbedUrl(raw);
+    if (normalized.error) {
+      window.alert(normalized.error);
+      return;
+    }
+
+    restoreEditorSelection();
+    insertHtmlAtSelection(`
+      <figure class="article-embed">
+        <iframe
+          src="${escapeAttr(normalized.url)}"
+          title="Embedded media"
+          loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+        ></iframe>
+        <figcaption>Media caption</figcaption>
+      </figure>
+      <p><br></p>
+    `);
+  }
+
+  function insertCallout(type = 'note') {
+    const callout = CALLOUT_TYPES.find((item) => item.type === type) || CALLOUT_TYPES[0];
+    insertHtmlAtSelection(`
+      <div class="art-callout callout-${escapeAttr(callout.type)}">
+        <p><strong>${escapeHtml(callout.heading)}:</strong> Add your ${escapeHtml(callout.label.toLowerCase())} here.</p>
+      </div>
+      <p><br></p>
+    `);
+  }
+
+  function runToolbarAction(button) {
+    if (button.action === 'link') {
+      openLinkModal();
+      return;
+    }
+
+    if (button.action === 'unlink') {
+      editorRef.current?.focus();
+      document.execCommand('unlink');
+      syncEditorBody({ rewrite: true });
+      return;
+    }
+
+    if (button.action === 'inlineCode') {
+      wrapSelectionWithTag('code');
+      return;
+    }
+
+    if (button.action === 'hr') {
+      editorRef.current?.focus();
+      document.execCommand('insertHorizontalRule');
+      syncEditorBody();
+      return;
+    }
+
+    if (button.action === 'image') {
+      saveEditorSelection();
+      bodyImageInputRef.current?.click();
+      return;
+    }
+
+    if (button.action === 'imageUrl') {
+      saveEditorSelection();
+      insertImageFromUrl();
+      return;
+    }
+
+    if (button.action === 'embed') {
+      saveEditorSelection();
+      insertEmbed();
+      return;
+    }
+
+    editorRef.current?.focus();
+    if (button.arg) document.execCommand(button.cmd, false, button.arg);
+    else document.execCommand(button.cmd);
+    syncEditorBody();
+  }
+
+  function handleEditorPaste(event) {
+    event.preventDefault();
+    const html = event.clipboardData?.getData('text/html');
+    const text = event.clipboardData?.getData('text/plain');
+    insertHtmlAtSelection(html ? cleanPastedHtml(html) : textToParagraphHtml(text));
+  }
+
+  function handleEditorKeyDown(event) {
+    const mod = event.metaKey || event.ctrlKey;
+    if (mod && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      openLinkModal();
+    }
   }
 
   function handleCoverFile(file) {
@@ -487,18 +933,15 @@ export function ArticleEditor({ showToast }) {
               <div key={index} style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 4px' }} />
             ) : (
               <button
-                key={button.cmd + (button.arg || '')}
+                key={(button.action || button.cmd) + (button.arg || '')}
                 type="button"
                 title={button.title}
                 onMouseDown={(event) => {
                   event.preventDefault();
-                  editorRef.current?.focus();
-                  if (button.arg) document.execCommand(button.cmd, false, button.arg);
-                  else document.execCommand(button.cmd);
-                  syncEditorBody();
+                  runToolbarAction(button);
                 }}
                 style={{
-                  minWidth: 30,
+                  minWidth: button.icon.length > 2 ? 46 : 30,
                   height: 30,
                   padding: '0 6px',
                   borderRadius: 'var(--r-sm)',
@@ -513,27 +956,46 @@ export function ArticleEditor({ showToast }) {
                 {button.icon}
               </button>
             ))}
-            <button
-              type="button"
-              title="Insert Callout Box"
-              onMouseDown={(event) => {
-                event.preventDefault();
-                insertHtmlAtSelection('<div class="art-callout"><p><strong>Key point:</strong> Add your callout text here.</p></div><p><br></p>');
+            {CALLOUT_TYPES.map((callout) => (
+              <button
+                key={callout.type}
+                type="button"
+                title={`Insert ${callout.label} callout`}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  insertCallout(callout.type);
+                }}
+                style={{ padding: '0 8px', height: 30, borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: 'rgba(59,154,232,0.08)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--sky-700)', cursor: 'pointer' }}
+              >
+                {callout.label}
+              </button>
+            ))}
+            <input
+              ref={bodyImageInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(event) => {
+                handleBodyImageFile(event.target.files[0]);
+                event.target.value = '';
               }}
-              style={{ padding: '0 8px', height: 30, borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: 'rgba(59,154,232,0.08)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--sky-700)', cursor: 'pointer' }}
-            >
-              + Callout
-            </button>
+            />
           </div>
 
           <div
             ref={editorRef}
             contentEditable
+            className="article-rich-editor"
             suppressContentEditableWarning
             onInput={syncEditorBody}
+            onPaste={handleEditorPaste}
+            onKeyDown={handleEditorKeyDown}
             style={{
               minHeight: 480,
               padding: '2rem 2.5rem',
+              border: 'none',
+              borderRadius: 0,
+              boxSizing: 'border-box',
               outline: 'none',
               fontFamily: "'Inter', sans-serif",
               fontSize: '1rem',
@@ -551,6 +1013,49 @@ export function ArticleEditor({ showToast }) {
             </span>
           </div>
         </div>
+
+        {linkModal.open ? (
+          <div className="article-link-modal-backdrop" role="presentation" onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeLinkModal();
+          }}>
+            <form className="article-link-modal" onSubmit={applyLink}>
+              <div>
+                <h3>{linkModal.isEditing ? 'Edit link' : 'Add link'}</h3>
+                <p>Use HTTPS for external links, or start internal links with /.</p>
+              </div>
+              <label>
+                Link URL
+                <input
+                  autoFocus
+                  value={linkModal.url}
+                  onChange={(event) => setLinkModal((modal) => ({ ...modal, url: event.target.value, error: '' }))}
+                  placeholder="https://example.com or /articles"
+                />
+              </label>
+              <label>
+                Link text
+                <input
+                  value={linkModal.text}
+                  onChange={(event) => setLinkModal((modal) => ({ ...modal, text: event.target.value }))}
+                  placeholder="Selected text"
+                />
+              </label>
+              {linkModal.error ? <p className="article-link-modal-error">{linkModal.error}</p> : null}
+              <div className="article-link-modal-actions">
+                {linkModal.isEditing ? (
+                  <button type="button" className="article-link-remove" onClick={removeLinkFromEditor}>
+                    Remove link
+                  </button>
+                ) : null}
+                <span />
+                <button type="button" onClick={closeLinkModal}>Cancel</button>
+                <button type="submit" className="article-link-apply">
+                  {linkModal.isEditing ? 'Update link' : 'Add link'}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : null}
       </div>
     );
   }
