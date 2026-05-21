@@ -75,9 +75,9 @@ export function Gallery() {
   return (
     <>
       <SEO
-        title="Media"
-        description="Photo gallery and media archive from Barkha Manral's Internet governance forums, community workshops, and global engagements."
-        path="/media"
+        title="Gallery"
+        description="Photo gallery from Barkha Manral's Internet governance forums, community workshops, and global engagements."
+        path="/gallery"
       />
       <div className="page-hero">
         <div className="page-hero-inner">

@@ -8,9 +8,7 @@ const LINKS = [
   { path: '/', label: 'Home' },
   { path: '/articles', label: 'Articles' },
   { path: '/portfolio', label: 'Portfolio' },
-  { path: '/media', label: 'Media' },
   { path: '/gallery', label: 'Gallery' },
-  { path: '/events', label: 'Events' },
   { path: '/about', label: 'About' },
   { path: '/contact', label: 'Contact' },
 ];
@@ -18,7 +16,6 @@ const LINKS = [
 function isActivePath(pathname, itemPath) {
   if (itemPath === '/') return pathname === '/';
   if (itemPath === '/articles') return pathname.startsWith('/articles') || pathname.startsWith('/blog');
-  if (itemPath === '/media') return pathname === '/media';
   if (itemPath === '/gallery') return pathname === '/gallery';
   return pathname === itemPath || pathname.startsWith(`${itemPath}/`);
 }

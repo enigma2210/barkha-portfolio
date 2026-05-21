@@ -12,7 +12,6 @@ import { Admin } from './pages/Admin';
 import { Article } from './pages/Article';
 import { Blogs } from './pages/Blogs';
 import { Contact } from './pages/Contact';
-import { Events } from './pages/Events';
 import { Gallery } from './pages/Gallery';
 import { Home } from './pages/Home';
 import { IIRO } from './pages/IIRO';
@@ -33,9 +32,7 @@ function AdminRoute({ showToast, toast }) {
       articles: '/articles',
       blogs: '/articles',
       portfolio: '/portfolio',
-      media: '/media',
       gallery: '/gallery',
-      events: '/events',
       about: '/about',
       contact: '/contact',
       soch: '/soch',
@@ -97,9 +94,7 @@ export function App() {
         <Route path="articles" element={<Blogs />} />
         <Route path="articles/:slug" element={<Article showToast={showToast} />} />
         <Route path="contact" element={<Contact showToast={showToast} />} />
-        <Route path="media" element={<Gallery />} />
         <Route path="gallery" element={<Gallery />} />
-        <Route path="events" element={<Events />} />
         <Route path="soch" element={<SOCH />} />
         <Route path="iiro" element={<IIRO />} />
         <Route path="blogs" element={<Navigate to="/articles" replace />} />
